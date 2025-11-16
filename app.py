@@ -9,23 +9,27 @@ from output_pipeline import decode_oligo_pool_to_skeleton
 from oligos.oligos import fragment_master_dna
 from text_reconstruction import reconstruct_text_with_gemini
 
-MODEL_NAME = "gemini-2.5-flash"
-
-
-def get_gemini_api_key() -> str:
-    key = os.getenv("GEMINI_API_KEY")
-    if not key:
-        # Fail loudly in the UI, but NEVER expose the key itself
-        st.error(
-            "GEMINI_API_KEY environment variable is not set.\n\n"
-            "Please set it in your shell before running: "
-            "`export GEMINI_API_KEY='your-real-key'`"
-        )
-        st.stop()
-    return key
-
 st.set_page_config(page_title="DNA Semantic Storage", layout="centered")
 
+# ---------------------- API KEY / MODEL ----------------------
+MODEL_NAME_DEFAULT = "gemini-2.5-flash"
+
+def get_gemini_api_key() -> str:
+    """
+    Get the Gemini API key from Streamlit secrets.
+    Works both locally (via .streamlit/secrets.toml)
+    and on Streamlit Cloud (via app secrets).
+    """
+    try:
+        return st.secrets["api_keys"]["GEMINI"]
+    except Exception:
+        st.error(
+            "Gemini API key not found in Streamlit secrets.\n\n"
+            "Add it under `[api_keys] GEMINI = \"...\"` in your secrets."
+        )
+        st.stop()
+
+# ---------------------- PAGE LAYOUT ----------------------
 st.title("DNA Semantic Storage Demo")
 st.caption("Two actions: Text → DNA file, DNA file → Text")
 
@@ -108,7 +112,7 @@ uploaded_file = st.file_uploader(
 # Gemini settings
 model_name = st.text_input(
     "Gemini model name",
-    value="gemini-2.5-flash",
+    value=MODEL_NAME_DEFAULT,
 )
 
 if st.button("Decode DNA file → text"):
@@ -134,14 +138,14 @@ if st.button("Decode DNA file → text"):
                     huffman_dict_path=huffman_path,
                 )
 
-            # 🔐 Get the key from environment, not from the user
+            # 🔐 Get the key from Streamlit secrets
             api_key = get_gemini_api_key()
 
             with st.spinner("Reconstructing readable text with Gemini..."):
                 reconstructed = reconstruct_text_with_gemini(
                     gap_skeleton,
                     api_key=api_key,
-                    model_name=MODEL_NAME,
+                    model_name=model_name,  # use the value from the text input
                 )
 
             st.success("Decoding and reconstruction complete.")

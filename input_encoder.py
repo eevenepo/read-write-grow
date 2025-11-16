@@ -255,28 +255,6 @@ class InputEncoder:
         """
         High-level helper:
         Given raw text, compute important tokens and return a gap-encoded semantic skeleton.
-
-        Output example for:
-            "DNA storage is a promising technology for future data systems."
-
-        {
-          "total_tokens": 10,
-          "num_important_tokens": 7,
-          "first_position": 0,
-          "gaps": [1, 3, 1, 2, 1, 1],
-          "tokens": [
-            "DNA",
-            "storage",
-            "promising",
-            "technology",
-            "future",
-            "data",
-            "systems"
-          ],
-          "debug_positions": [0, 1, 4, 5, 7, 8, 9]
-        }
-
-        Notes:
           - gap[i] = positions[i] - positions[i-1]
           - first_position is stored explicitly (usually 0 for the first kept token)
         """
@@ -330,7 +308,6 @@ class InputEncoder:
     def build_word_dictionary(self, gap_skeleton: Dict[str, Any]) -> Dict[str, int]:
         """
         Build a word -> token_id dictionary from the gap skeleton.
-
         IDs are assigned in order of first appearance in gap_skeleton["tokens"].
 
         """
@@ -405,22 +382,6 @@ class InputEncoder:
               (distance from position 0).
             - For token i > 0, gap = position[i] - position[i-1],
               i.e. the same 'gaps' you already computed.
-
-        Inputs:
-            gap_skeleton:
-                {
-                    "total_tokens": int,
-                    "num_important_tokens": int,
-                    "first_position": int,
-                    "gaps": List[int],          # length = num_important_tokens - 1 (usually)
-                    "tokens": List[str],        # important token texts in order
-                    "debug_positions": List[int]
-                }
-
-            token_to_id: mapping from token string -> token_id (int)
-
-        Returns:
-            bytes: relational byte stream ready for Huffman → trits → DNA.
         """
 
         total_tokens = gap_skeleton["total_tokens"]
