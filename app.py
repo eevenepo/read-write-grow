@@ -90,17 +90,17 @@ if st.button("Encode text → DNA file"):
             except Exception as e:
                 st.error(f"Error during encoding: {e}")
             else:
+                total_bases = ''.join([x['payload'] for x in all_frags])
                 st.success(
-                    f"Generated {len(all_frags)} oligos "
-                    f"(dict: {len(dict_frags)}, rel: {len(rel_frags)})."
+                    f"Generated {len(all_frags)} oligos. (dict: {len(dict_frags)}, rel: {len(rel_frags)})."
                 )
+                st.success( f"**Estimated price (0.05$/nt):** {0.05 * len(total_bases):.1f} Euro")
                 st.download_button(
                     label="Download DNA oligo file",
                     data=bytes_data,
                     file_name="dna_oligos.txt",
                     mime="text/plain",
                 )
-
 # ---------------------- 2. DNA FILE → TEXT ----------------------
 st.header("2. DNA oligo file → reconstructed text")
 
