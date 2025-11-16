@@ -1,7 +1,7 @@
 import numpy as np
 import spacy
 from sentence_transformers import SentenceTransformer
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Set, Tuple as TypingTuple
 import lzma
 import json
 
@@ -14,7 +14,30 @@ class InputEncoder:
     pip install sentence-transformers spacy numpy
     python -m spacy download en_core_web_sm
     """
-    
+
+    # ------------------------
+    # Short, high-impact list
+    # ------------------------
+    # Words that fundamentally change meaning - NEVER filter these out
+    SEMANTIC_CRITICAL_WORDS: Set[str] = {
+        # Negation
+        "not", "no", "never", "n't",
+
+        # Logical structure
+        "because", "if", "but",
+
+        # Modal verbs (minimal)
+        "must", "should", "may", "might", "could", "would",
+
+        # Quantifiers (minimal)
+        "all", "any", "most", "few",
+    }
+
+    # POS tags to keep even if they're stop words
+    POS_TO_KEEP: Set[str] = {
+        "NOUN", "PROPN", "ADJ", "VERB", "NUM", "AUX", "PRON"
+    }
+
     def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
         """
         Initialize the encoder with sentence-BERT model and spaCy tokenizer.
@@ -33,24 +56,47 @@ class InputEncoder:
             os.system('python -m spacy download en_core_web_sm')
             self.nlp = spacy.load('en_core_web_sm')
     
+    # -------------------------
+    # tokenize_text with POS + critical words
+    # -------------------------
     def tokenize_text(self, text: str) -> List[List[Tuple[str, int, int]]]:
         """
-        Tokenize text into sentences and tokens using spaCy.
-        Args:
-            text: Input text string
+        Tokenize text into sentences and tokens using spaCy, but:
+          - drop uninformative stopwords like "a", "the" etc.
+          - ALWAYS keep semantic-critical words
+          - keep content POS even if they are stopwords (e.g. pronouns, numerals)
+        
         Returns:
-            List of sentences, where each sentence is a list of (token, start_idx, end_idx) tuples
+            List of sentences, where each sentence is a list of
+            (token_text, start_idx, end_idx) tuples
         """
         doc = self.nlp(text)
-        
-        sentences = []
+
+        sentences: List[List[Tuple[str, int, int]]] = []
         for sent in doc.sents:
-            tokens = []
+            tokens: List[Tuple[str, int, int]] = []
             for token in sent:
-                if not token.is_punct and not token.is_space:
-                    # Store token text and its character position, leave out the punctuation
-                    tokens.append((token.text, token.idx, token.idx + len(token.text)))
-            sentences.append(tokens)
+                # Skip punctuation and whitespace
+                if token.is_punct or token.is_space:
+                    continue
+
+                token_lower = token.text.lower()
+
+                # Keep token if ANY of these conditions are true:
+                # 1. It's semantically critical (negations, modals, etc.)
+                # 2. It's not a stop word
+                # 3. It's a stop word but has an important POS tag
+                if (
+                    token_lower in self.SEMANTIC_CRITICAL_WORDS
+                    or not token.is_stop
+                    or token.pos_ in self.POS_TO_KEEP
+                ):
+                    tokens.append(
+                        (token.text, token.idx, token.idx + len(token.text))
+                    )
+
+            if tokens:  # Only add non-empty sentences
+                sentences.append(tokens)
         
         return sentences
     
@@ -81,24 +127,12 @@ class InputEncoder:
         return 1.0 - similarity
     
     def compute_token_importance(
-    self,
-    sentences: List[List[Tuple[str, int, int]]]) -> Dict[str, float]:
+        self,
+        sentences: List[List[Tuple[str, int, int]]]
+    ) -> Dict[str, float]:
         """
         Compute semantic importance (μ_k) for each unique token in the text.
-
-        Args:
-            sentences: List of tokenized sentences (each is a list of
-                    (token_text, char_start, char_end))
-
-        Returns:
-            Dictionary mapping each unique token (string) to its importance weight μ_k
         """
-        M = len(sentences)
-
-        # ----------------------------------------------------------------------
-        # STEP 1: For each token occurrence, compute normalized semantic loss σ̄_in
-        # ----------------------------------------------------------------------
-
         # (sentence_idx, token_idx) -> normalized loss σ̄_in
         token_losses: Dict[Tuple[int, int], float] = {}
 
@@ -123,7 +157,7 @@ class InputEncoder:
                 sigma_in = self.cosine_distance(mu_i, mu_hat_i)
                 sigma_values.append(sigma_in)
 
-            # Normalize semantic losses within the sentence (equation 13)
+            # Normalize semantic losses within the sentence
             total_sigma = sum(sigma_values)
             if total_sigma > 0:
                 normalized_losses = [sigma / total_sigma for sigma in sigma_values]
@@ -135,10 +169,7 @@ class InputEncoder:
             for n in range(N_i):
                 token_losses[(i, n)] = normalized_losses[n]
 
-        # ----------------------------------------------------------------------
-        # STEP 2: Build vocabulary K and positions Q_ik
-        # ----------------------------------------------------------------------
-        # vocab[token][i] = list of token indices n where token appears in sentence i
+        # Build vocabulary: token -> sentence -> positions
         vocab: Dict[str, Dict[int, List[int]]] = {}
 
         for i, sentence in enumerate(sentences):
@@ -149,57 +180,56 @@ class InputEncoder:
                     vocab[token_text][i] = []
                 vocab[token_text][i].append(n)
 
-        # Precompute sentence lengths α_i = N_i
+        # Precompute sentence lengths
         sentence_lengths = [len(s) for s in sentences]
 
-        # ----------------------------------------------------------------------
-        # STEP 3: Compute μ_k for each token type (equation 15)
-        # ----------------------------------------------------------------------
         token_weights: Dict[str, float] = {}
 
         for token, sent_positions in vocab.items():
-            # Total occurrences across all sentences: Σ_i |Q_ik|
             total_occurrences = sum(len(positions) for positions in sent_positions.values())
             if total_occurrences == 0:
                 token_weights[token] = 0.0
                 continue
 
-            # Weighted sum Σ_i α_i Σ_{n ∈ Q_ik} σ̄_in
             weighted_sum = 0.0
 
             for i, positions in sent_positions.items():
-                alpha_i = sentence_lengths[i]  # α_i = N_i
+                alpha_i = sentence_lengths[i]
                 loss_sum = 0.0
 
                 for n in positions:
-                    # Look up σ̄_in from token_losses
                     loss_sum += token_losses.get((i, n), 0.0)
 
                 weighted_sum += alpha_i * loss_sum
 
-            # μ_k = (1 / Σ_i |Q_ik|) * weighted_sum
             token_weights[token] = weighted_sum / total_occurrences
 
         return token_weights
     
-    def get_important_tokens_with_positions(self, sentences: List[List[Tuple[str, int, int]]], 
-                                           token_weights: Dict[str, float], 
-                                           masking_ratio: float) -> List[Dict]:
+    def get_important_tokens_with_positions(
+        self,
+        sentences: List[List[Tuple[str, int, int]]], 
+        token_weights: Dict[str, float], 
+        masking_ratio: float
+    ) -> List[Dict]:
         """
         Get important tokens (those NOT masked) with their positions.
-        Args:
-            sentences: List of tokenized sentences
-            token_weights: Dictionary of token importance weights
-            masking_ratio: Fraction of unique tokens to mask (0 to 1)
-        Returns:
-            List of dictionaries containing token info for DNA encoding
+        *Semantic-critical words are never masked, regardless of weight.*
         """
         # Sort tokens by weight (ascending order - least important first)
         sorted_tokens = sorted(token_weights.items(), key=lambda x: x[1])
         
-        # Determine which unique tokens to mask (least important)
+        # Determine how many unique tokens to mask (least important)
         num_to_mask = int(masking_ratio * len(sorted_tokens))
-        tokens_to_mask = set([token for token, _ in sorted_tokens[:num_to_mask]])
+        
+        # Build mask set but NEVER include semantic-critical words
+        tokens_to_mask: Set[str] = set()
+        for token, _ in sorted_tokens:
+            if len(tokens_to_mask) >= num_to_mask:
+                break
+            if token.lower() in self.SEMANTIC_CRITICAL_WORDS:
+                continue
+            tokens_to_mask.add(token)
         
         # Collect all important (non-masked) tokens with their positions
         important_tokens = []
@@ -207,8 +237,9 @@ class InputEncoder:
         
         for sent_idx, sentence in enumerate(sentences):
             for token_idx, (token_text, char_start, char_end) in enumerate(sentence):
-                if token_text not in tokens_to_mask:
-                    # This token is important - save it
+                token_lower = token_text.lower()
+                # Never mask semantic-critical words
+                if token_lower in self.SEMANTIC_CRITICAL_WORDS or token_text not in tokens_to_mask:
                     important_tokens.append({
                         'token': token_text,
                         'importance_weight': token_weights[token_text],
@@ -223,19 +254,9 @@ class InputEncoder:
         return important_tokens
     
 
-    #VALERIAS CODE
     def positions_to_gaps(self, positions: List[int]) -> Dict:
         """
         Convert sorted token positions into gap encoding.
-        
-        Input:
-            [0, 1, 4, 5, 7, 8, 9]
-
-        Output:
-            {
-            "first_position": 0,
-            "gaps": [1, 3, 1, 2, 1, 1]
-            }
         """
         if not positions:
             return {"first_position": 0, "gaps": []}
@@ -255,8 +276,6 @@ class InputEncoder:
         """
         High-level helper:
         Given raw text, compute important tokens and return a gap-encoded semantic skeleton.
-          - gap[i] = positions[i] - positions[i-1]
-          - first_position is stored explicitly (usually 0 for the first kept token)
         """
         print(f"Encoding text to GAP semantic skeleton (masking_ratio={masking_ratio})")
 
@@ -286,12 +305,12 @@ class InputEncoder:
         positions: List[int] = [t["global_position"] for t in important_tokens]
         tokens_only: List[str] = [t["token"] for t in important_tokens]
 
-        # 4) Convert positions → gaps (reuse helper)
+        # 4) Convert positions → gaps
         gap_info = self.positions_to_gaps(positions)
         first_position = gap_info["first_position"]
         gaps = gap_info["gaps"]
 
-        # 5) Total tokens = global tokens across all sentences
+        # 5) Total tokens = tokens after semantic filtering
         total_tokens = sum(len(s) for s in sentences)
 
         gap_skeleton: Dict[str, Any] = {
@@ -309,7 +328,6 @@ class InputEncoder:
         """
         Build a word -> token_id dictionary from the gap skeleton.
         IDs are assigned in order of first appearance in gap_skeleton["tokens"].
-
         """
         tokens = gap_skeleton["tokens"]
 
@@ -332,16 +350,9 @@ class InputEncoder:
             [token_id: 4 bytes big-endian]
             [word_length: 1 byte]
             [word_ascii: word_length bytes]
-
-        Token IDs must be sequential integers (0..N-1).
-        Returns:
-            Byte string suitable for Huffman → trits → DNA encoding.
         """
-
-        # Invert mapping: id -> word
         id_to_word = {idx: word for word, idx in token_to_id.items()}
 
-        # Validate ID sequence integrity
         max_id = max(id_to_word.keys(), default=-1)
         for token_id in range(max_id + 1):
             if token_id not in id_to_word:
@@ -354,7 +365,6 @@ class InputEncoder:
         for token_id in range(max_id + 1):
             word = id_to_word[token_id]
 
-            # ASCII check
             try:
                 word_bytes = word.encode("ascii")
             except UnicodeEncodeError:
@@ -364,7 +374,6 @@ class InputEncoder:
             if length > 255:
                 raise ValueError(f"Word '{word}' too long (max 255 for 1 byte length).")
 
-            # Serialize
             byte_chunks.append(token_id.to_bytes(4, "big"))
             byte_chunks.append(length.to_bytes(1, "big"))
             byte_chunks.append(word_bytes)
@@ -377,13 +386,15 @@ class InputEncoder:
         token_to_id: Dict[str, int],
     ) -> bytes:
         """
-        Conventions:
-            - gap for the FIRST important token is set to first_position
-              (distance from position 0).
-            - For token i > 0, gap = position[i] - position[i-1],
-              i.e. the same 'gaps' you already computed.
-        """
+        Serialize the relational (gap skeleton) to bytes.
 
+        Header:
+            total_tokens: 4 bytes
+            first_position: 2 bytes
+
+        Then for each important token:
+            [gap:1 byte][token_id:4 bytes]
+        """
         total_tokens = gap_skeleton["total_tokens"]
         first_position = gap_skeleton["first_position"]
         gaps = gap_skeleton["gaps"]
@@ -391,9 +402,7 @@ class InputEncoder:
 
         num_important = len(tokens)
 
-        # Basic consistency check:
         if num_important == 0:
-            # Header only, no tokens
             return total_tokens.to_bytes(4, "big") + first_position.to_bytes(2, "big")
 
         if len(gaps) != max(0, num_important - 1):
@@ -401,7 +410,6 @@ class InputEncoder:
                 f"Gap count ({len(gaps)}) must be num_important_tokens - 1 ({num_important - 1})."
             )
 
-        # Range checks for header fields
         if not (0 <= total_tokens <= 0xFFFFFFFF):
             raise ValueError("total_tokens must fit in 4 bytes (0..2^32-1).")
 
@@ -410,18 +418,11 @@ class InputEncoder:
 
         byte_chunks = []
 
-        # ------------------------------------------------------------------
-        # 1) Header
-        # ------------------------------------------------------------------
+        # Header
         byte_chunks.append(total_tokens.to_bytes(4, "big"))
         byte_chunks.append(first_position.to_bytes(2, "big"))
 
-        # ------------------------------------------------------------------
-        # 2) Per-token entries: [gap:1 byte][token_id:4 bytes]
-        #    Convention:
-        #       - token 0: gap = first_position (distance from position 0)
-        #       - token i>0: gap = gaps[i-1] (difference to previous important token)
-        # ------------------------------------------------------------------
+        # Per-token entries
         for i, tok in enumerate(tokens):
             if tok not in token_to_id:
                 raise ValueError(f"Token '{tok}' not found in token_to_id dictionary.")
@@ -443,40 +444,43 @@ class InputEncoder:
                     f"token_id {token_id} out of 4-byte range (0..2^32-1)."
                 )
 
-            # Serialize [gap:1][token_id:4]
             byte_chunks.append(gap_val.to_bytes(1, "big"))
             byte_chunks.append(token_id.to_bytes(4, "big"))
 
         return b"".join(byte_chunks)
 
     
-    #Do we need mask_tokens?
-    
-    def mask_tokens(self, sentences: List[List[Tuple[str, int, int]]], 
-                   token_weights: Dict[str, float], 
-                   masking_ratio: float) -> List[List[str]]:
+    def mask_tokens(
+        self,
+        sentences: List[List[Tuple[str, int, int]]], 
+        token_weights: Dict[str, float], 
+        masking_ratio: float
+    ) -> List[List[str]]:
         """
         Mask the least important tokens according to masking ratio.
-        Args:
-            sentences: List of tokenized sentences
-            token_weights: Dictionary of token importance weights
-            masking_ratio: Fraction of unique tokens to mask (0 to 1)      
-        Returns:
-            List of sentences with tokens masked (as strings)
+        Semantic-critical words are NEVER masked.
         """
         # Sort tokens by weight (ascending order - least important first)
         sorted_tokens = sorted(token_weights.items(), key=lambda x: x[1])
         
-        # Determine how many unique tokens to mask
         num_to_mask = int(masking_ratio * len(sorted_tokens))
-        tokens_to_mask = set([token for token, _ in sorted_tokens[:num_to_mask]])
+        tokens_to_mask: Set[str] = set()
+        for token, _ in sorted_tokens:
+            if len(tokens_to_mask) >= num_to_mask:
+                break
+            if token.lower() in self.SEMANTIC_CRITICAL_WORDS:
+                continue
+            tokens_to_mask.add(token)
         
-        # Apply masking
-        masked_sentences = []
+        masked_sentences: List[List[str]] = []
         for sentence in sentences:
-            masked_sentence = []
+            masked_sentence: List[str] = []
             for token_text, _, _ in sentence:
-                if token_text in tokens_to_mask:
+                token_lower = token_text.lower()
+                if token_lower in self.SEMANTIC_CRITICAL_WORDS:
+                    # never mask critical words
+                    masked_sentence.append(token_text)
+                elif token_text in tokens_to_mask:
                     masked_sentence.append('#')
                 else:
                     masked_sentence.append(token_text)
@@ -484,39 +488,30 @@ class InputEncoder:
         
         return masked_sentences
     
-    #Do we need the LZMA compression?
-    
     def lz_encode(self, masked_sentences: List[List[str]]) -> bytes:
         """
         Convert masked text to compressed bit string using LZ compression.
-        Args:
-            masked_sentences: List of masked sentences
-        Returns:
-            Compressed byte string
         """
-        # Reconstruct text from masked sentences
         text = ''
         for sentence in masked_sentences:
             text += ' '.join(sentence) + ' '
         
-        # Apply LZMA compression (Python's implementation of LZ)
         compressed = lzma.compress(text.encode('utf-8'))
         
         return compressed
     
-    def save_important_tokens(self, important_tokens: List[Dict], output_file: str, total_tokens: int):
+    def save_important_tokens(
+        self,
+        important_tokens: List[Dict],
+        output_file: str,
+        total_tokens: int
+    ):
         """
         Save important tokens to a file for DNA encoding.
-        
-        Args:
-            important_tokens: List of token dictionaries
-            output_file: Path to output file
-            total_tokens: Total number of tokens in the original text
         """
-        # JSON format with simplified structure
         json_file = output_file.replace('.txt', '.json')
         
-        json_output = { # Structure for JSON output, still modifiable based on needs
+        json_output = {
             "total_tokens": total_tokens,
             "tokens": [
                 {
@@ -531,25 +526,21 @@ class InputEncoder:
             json.dump(json_output, f, indent=2, ensure_ascii=False)
         print(f"  ✓ Saved JSON data to: {json_file}")
         
-        # Simple token sequence for DNA encoding (just the tokens in order)
         seq_file = output_file.replace('.txt', '_sequence.txt')
         with open(seq_file, 'w', encoding='utf-8') as f:
             tokens_only = [item['token'] for item in important_tokens]
             f.write(' '.join(tokens_only))
         print(f"  ✓ Saved token sequence to: {seq_file}")
     
-    #What is this doing?
-
-    def encode(self, text: str, masking_ratio: float = 0.3, output_file: str = 'important_tokens.txt') -> Tuple[bytes, Dict]:
+    def encode(
+        self,
+        text: str,
+        masking_ratio: float = 0.3,
+        output_file: str = 'important_tokens.txt'
+    ) -> TypingTuple[bytes, Dict]:
         """
         Full encoding pipeline: tokenize -> compute importance -> mask -> compress.
         Also saves important tokens to file for DNA encoding.
-        Args:
-            text: Input text to compress
-            masking_ratio: Fraction of unique tokens to mask (default 0.3)
-            output_file: Path to save important tokens    
-        Returns:
-            Tuple of (compressed_bytes, metadata_dict)
         """
         print(f"Encoding text with masking ratio: {masking_ratio}")
         
@@ -565,7 +556,11 @@ class InputEncoder:
         
         # Step 3: Get important tokens with positions
         print("Step 3: Extracting important tokens for DNA encoding...")
-        important_tokens = self.get_important_tokens_with_positions(sentences, token_weights, masking_ratio)
+        important_tokens = self.get_important_tokens_with_positions(
+            sentences,
+            token_weights,
+            masking_ratio
+        )
         print(f"  Found {len(important_tokens)} important tokens (kept after masking)")
         
         # Step 4: Save important tokens to file
@@ -581,7 +576,6 @@ class InputEncoder:
         print("Step 6: Applying LZ compression...")
         compressed = self.lz_encode(masked_sentences)
         
-        # Store metadata, maybe useful for analysis
         metadata = {
             'masking_ratio': masking_ratio,
             'num_sentences': len(sentences),
