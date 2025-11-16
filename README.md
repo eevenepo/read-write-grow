@@ -14,6 +14,7 @@ This repository provides the complete end-to-end workflow:
 
 ## Pipeline Overview
 
+```
 Input Text
 	↓
 Semantic Encoder (spaCy + SBERT)
@@ -31,6 +32,7 @@ Reassembly → Inverse Goldman → Huffman Decode
 Semantic Skeleton
 	↓
 Gemini LLM Reconstruction → Readable Text
+``` 
 
 ## Highlights
 
