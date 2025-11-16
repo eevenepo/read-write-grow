@@ -47,7 +47,7 @@ class InputEncoder:
         for sent in doc.sents:
             tokens = []
             for token in sent:
-                if not token.is_punct and not token.is_stop and not token.is_space:
+                if not token.is_punct and not token.is_space:
                     # Store token text and its character position, leave out the punctuation
                     tokens.append((token.text, token.idx, token.idx + len(token.text)))
             sentences.append(tokens)
