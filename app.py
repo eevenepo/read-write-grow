@@ -1,13 +1,13 @@
+"""BioZip: DNA-based data storage application landing page."""
 import streamlit as st
-
-# -------------- Page Config -----------------
 st.set_page_config(
     page_title="BioZip",
     page_icon="🧬",
 )
 
 # -------------- Global Styles -----------------
-st.markdown("""
+st.markdown(
+    """
     <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -30,23 +30,42 @@ st.markdown("""
             background: #1053c4;
         }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
 # -------------- Hero Section -----------------
-st.markdown("""
+st.markdown(
+    """
     # Unlock the Future of Data Storage
 
-    Harness the power of DNA to store massive amounts of data in a fraction of the space. 
-                
+    Harness the power of DNA to store massive amounts of data in a fraction of the space.  
     BioZip offers DNA as a secure and sustainable data medium, built to last for millennia.
 
-    Store Smarter. Store Forever.
-""")
+    **Store Smarter. Store Forever.**
+    """
+)
 
-# Top CTA → go to demo page
-if st.button("Try BioZip today", key="hero_demo"):
-    # Note: BioZip.py lives in the pages/ folder
-    st.switch_page("pages/BioZip.py")
+st.markdown("### Choose a demo to explore:")
+
+# Top CTAs → go to demos
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("#### BioZip Text")
+    st.write("Store and reconstruct documents using semantic compression + DNA encoding.")
+    if st.button("Try Text Demo", key="hero_text_demo"):
+        # This must match your file in `pages/`
+        st.switch_page("pages/biozip_text.py")
+
+with col2:
+    st.markdown("#### BioZip Video")
+    st.write("Compress, segment and encode video into DNA oligos, then reconstruct the file.")
+    if st.button("Try Video Demo", key="hero_video_demo"):
+        # This must match your file in `pages/`
+        st.switch_page("pages/biozip_video.py")
+
+st.markdown("---")
 
 # -------------- Story Sections -----------------
 with st.container():
@@ -57,11 +76,13 @@ with st.container():
         )
 
     with txt:
-        st.markdown("""
-        ### The age of data
-        While our need for data storage has grown exponentially, this has come at a cost.  
-        Modern data centers consume huge amounts of energy, cause pollution, and fragment habitats.
-        """)
+        st.markdown(
+            """
+            ### The age of data
+            While our need for data storage has grown exponentially, this has come at a cost.  
+            Modern data centers consume huge amounts of energy, cause pollution, and fragment habitats.
+            """
+        )
 
 with st.container():
     img, txt = st.columns(2)
@@ -70,10 +91,12 @@ with st.container():
             "![Nature gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2p3c2V0dXk5eDc0d2ZjdTZoaHdjY253cGtkcW5lbWF5OWRoMTUweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8NdQyUi0C7ug0/giphy.gif)"
         )
     with txt:
-        st.markdown("""
-        ### Nature's oldest database
-        Unlike magnetic disks, DNA boasts extreme resilience, lasting up to 1,000,000 years.
-        """)
+        st.markdown(
+            """
+            ### Nature's oldest database
+            Unlike magnetic disks, DNA boasts extreme resilience, lasting up to 1,000,000 years.
+            """
+        )
 
 # -------------- Features -----------------
 st.markdown("## Why DNA?")
@@ -81,29 +104,44 @@ with st.container():
     resilience, eco, space = st.columns(3)
 
     with resilience:
-        st.markdown("""
-        ### Resilience 💾  
-        In good conditions, DNA can last over 1,000,000+ years (!)
-        """)
+        st.markdown(
+            """
+            ### Resilience 💾  
+            In good conditions, DNA can last over 1,000,000+ years (!)
+            """
+        )
 
     with eco:
-        st.markdown("""
-        ### Eco-friendly 🌱  
-        DNA storage requires no power, and the sequences are completely biodegradable.
-        """)
+        st.markdown(
+            """
+            ### Eco-friendly 🌱  
+            DNA storage requires no power, and the sequences are completely biodegradable.
+            """
+        )
 
     with space:
-        st.markdown("""
-        ### The data of space 🚀  
-        The knowledge of humankind to the stars, in the size of a phone.
-        """)
+        st.markdown(
+            """
+            ### The data of space 🚀  
+            The knowledge of humankind to the stars, in the size of a phone.
+            """
+        )
 
 # -------------- Bottom CTA -----------------
-st.markdown('## Convinced? Try it today! :dna:')
+st.markdown("## Convinced? Pick your pipeline :dna:")
 
-# Bottom CTA → same demo page
-if st.button('Take me to the demo', key="bottom_demo"):
-    st.switch_page("pages/BioZip.py")
+bottom_col1, bottom_col2 = st.columns(2)
 
-with st.container():
-    st.write("📧 Contact: support@biozip.com | © 2025 BioZip")
+with bottom_col1:
+    st.markdown("#### Text pipeline")
+    st.write("Semantic compression → token skeleton → DNA → LLM-based reconstruction.")
+    if st.button("Go to Text Demo", key="bottom_text_demo"):
+        st.switch_page("pages/biozip_text.py")
+
+with bottom_col2:
+    st.markdown("#### Video pipeline")
+    st.write("Grayscale compression → temporal segmentation → DNA round-trip for video files.")
+    if st.button("Go to Video Demo", key="bottom_video_demo"):
+        st.switch_page("pages/biozip_video.py")
+
+st.write("📧 Contact: support@biozip.com | © 2025 BioZip")

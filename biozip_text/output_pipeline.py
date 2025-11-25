@@ -1,11 +1,10 @@
 # output_pipeline.py
+"""Text decoding pipeline: DNA oligos -> semantic skeleton."""
 from pathlib import Path
 from typing import List, Dict, Any
 import sys
-import os
-from text_reconstruction import reconstruct_text_with_gemini
 
-
+from biozip_text.text_reconstruction import reconstruct_text_with_gemini
 from oligos.oligos import (
     Oligo,
     orient_oligo,

@@ -1,9 +1,7 @@
 import numpy as np
 import spacy
 from sentence_transformers import SentenceTransformer
-from typing import List, Tuple, Dict, Any, Set, Tuple as TypingTuple
-import lzma
-import json
+from typing import List, Tuple, Dict, Any, Set
 
 class InputEncoder:
     """
@@ -455,16 +453,17 @@ class InputEncoder:
         sentences: List[List[Tuple[str, int, int]]], 
         token_weights: Dict[str, float], 
         masking_ratio: float
-    ) -> List[List[str]]:
+    ) -> Set[str]:
         """
-        Mask the least important tokens according to masking ratio.
+        Determine which tokens to mask based on importance.
+        Returns a set of tokens to mask (least important ones).
         Semantic-critical words are NEVER masked.
         """
-        # Sort tokens by weight (ascending order - least important first)
         sorted_tokens = sorted(token_weights.items(), key=lambda x: x[1])
         
         num_to_mask = int(masking_ratio * len(sorted_tokens))
         tokens_to_mask: Set[str] = set()
+        
         for token, _ in sorted_tokens:
             if len(tokens_to_mask) >= num_to_mask:
                 break
@@ -472,127 +471,62 @@ class InputEncoder:
                 continue
             tokens_to_mask.add(token)
         
-        masked_sentences: List[List[str]] = []
-        for sentence in sentences:
-            masked_sentence: List[str] = []
-            for token_text, _, _ in sentence:
-                token_lower = token_text.lower()
-                if token_lower in self.SEMANTIC_CRITICAL_WORDS:
-                    # never mask critical words
-                    masked_sentence.append(token_text)
-                elif token_text in tokens_to_mask:
-                    masked_sentence.append('#')
-                else:
-                    masked_sentence.append(token_text)
-            masked_sentences.append(masked_sentence)
-        
-        return masked_sentences
+        return tokens_to_mask
     
-    def lz_encode(self, masked_sentences: List[List[str]]) -> bytes:
-        """
-        Convert masked text to compressed bit string using LZ compression.
-        """
-        text = ''
-        for sentence in masked_sentences:
-            text += ' '.join(sentence) + ' '
-        
-        compressed = lzma.compress(text.encode('utf-8'))
-        
-        return compressed
-    
-    def save_important_tokens(
-        self,
-        important_tokens: List[Dict],
-        output_file: str,
-        total_tokens: int
-    ):
-        """
-        Save important tokens to a file for DNA encoding.
-        """
-        json_file = output_file.replace('.txt', '.json')
-        
-        json_output = {
-            "total_tokens": total_tokens,
-            "tokens": [
-                {
-                    "position": item['global_position'],
-                    "text": item['token']
-                }
-                for item in important_tokens
-            ]
-        }
-        
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(json_output, f, indent=2, ensure_ascii=False)
-        print(f"  ✓ Saved JSON data to: {json_file}")
-        
-        seq_file = output_file.replace('.txt', '_sequence.txt')
-        with open(seq_file, 'w', encoding='utf-8') as f:
-            tokens_only = [item['token'] for item in important_tokens]
-            f.write(' '.join(tokens_only))
-        print(f"  ✓ Saved token sequence to: {seq_file}")
+
     
     def encode(
         self,
         text: str,
         masking_ratio: float = 0.3,
-        output_file: str = 'important_tokens.txt'
-    ) -> TypingTuple[bytes, Dict]:
+    ) -> Dict[str, Any]:
         """
         Full encoding pipeline: tokenize -> compute importance -> mask -> compress.
-        Also saves important tokens to file for DNA encoding.
-        """
-        print(f"Encoding text with masking ratio: {masking_ratio}")
+        Returns semantic skeleton for DNA encoding (in-memory only).
         
+        Args:
+            text: Input text to encode
+            masking_ratio: Fraction of tokens to mask (0.0-1.0)
+        
+        Returns:
+            Dictionary with gap_skeleton and metadata
+        """
         # Step 1: Tokenize
-        print("Step 1: Tokenizing...")
         sentences = self.tokenize_text(text)
-        print(f"  Found {len(sentences)} sentences")
         
         # Step 2: Compute token importance
-        print("Step 2: Computing token importance...")
         token_weights = self.compute_token_importance(sentences)
-        print(f"  Computed weights for {len(token_weights)} unique tokens")
         
         # Step 3: Get important tokens with positions
-        print("Step 3: Extracting important tokens for DNA encoding...")
         important_tokens = self.get_important_tokens_with_positions(
             sentences,
             token_weights,
             masking_ratio
         )
-        print(f"  Found {len(important_tokens)} important tokens (kept after masking)")
         
-        # Step 4: Save important tokens to file
-        print("Step 4: Saving important tokens to file...")
+        # Step 4: Build gap skeleton
         total_tokens = sum(len(s) for s in sentences)
-        self.save_important_tokens(important_tokens, output_file, total_tokens)
+        positions = [t["global_position"] for t in important_tokens]
+        tokens_only = [t["token"] for t in important_tokens]
         
-        # Step 5: Mask tokens
-        print("Step 5: Masking tokens...")
-        masked_sentences = self.mask_tokens(sentences, token_weights, masking_ratio)
+        gap_info = self.positions_to_gaps(positions)
         
-        # Step 6: LZ encoding
-        print("Step 6: Applying LZ compression...")
-        compressed = self.lz_encode(masked_sentences)
-        
-        metadata = {
-            'masking_ratio': masking_ratio,
-            'num_sentences': len(sentences),
-            'num_tokens': sum(len(s) for s in sentences),
-            'num_unique_tokens': len(token_weights),
-            'num_important_tokens': len(important_tokens),
-            'num_masked_tokens': sum(len(s) for s in sentences) - len(important_tokens),
-            'compressed_size': len(compressed),
-            'token_weights': token_weights,
-            'important_tokens': important_tokens
+        gap_skeleton = {
+            "total_tokens": total_tokens,
+            "num_important_tokens": len(tokens_only),
+            "first_position": gap_info["first_position"],
+            "gaps": gap_info["gaps"],
+            "tokens": tokens_only,
         }
         
-        print(f"\nEncoding complete!")
-        print(f"  Total tokens: {metadata['num_tokens']}")
-        print(f"  Unique tokens: {metadata['num_unique_tokens']}")
-        print(f"  Important tokens saved: {metadata['num_important_tokens']}")
-        print(f"  Tokens masked: {metadata['num_masked_tokens']}")
-        print(f"  Compressed size: {metadata['compressed_size']} bytes")
-        
-        return compressed, metadata
+        return {
+            "gap_skeleton": gap_skeleton,
+            "metadata": {
+                'masking_ratio': masking_ratio,
+                'num_sentences': len(sentences),
+                'num_tokens': total_tokens,
+                'num_unique_tokens': len(token_weights),
+                'num_important_tokens': len(important_tokens),
+                'num_masked_tokens': total_tokens - len(important_tokens),
+            }
+        }

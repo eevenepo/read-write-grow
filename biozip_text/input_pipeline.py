@@ -1,7 +1,8 @@
-# input_pipeline.py
+"""Text encoding pipeline: text -> semantic skeleton -> DNA oligos."""
 from pathlib import Path
+from typing import Dict, Any
 
-from input_encoder import InputEncoder
+from biozip_text.input_encoder import InputEncoder
 from oligos.oligos import Oligo, fragment_master_dna, int_to_fixed_trits
 
 # Header + padding constants
@@ -18,24 +19,20 @@ def add_header_and_pad(
 ) -> str:
     """
     Add a fixed-length trit header encoding the original Huffman length,
-    then pad with dummy trits so that the total length in trits
-    (which equals DNA length) fits the fragmentation pattern:
+    then pad with dummy trits so fragmentation never chops real payload.
 
-        len(dna) = payload_len + k * (payload_len - overlap)
-
-    This ensures fragmentation never chops real Huffman payload; only padding.
+    Final DNA length L must satisfy: L = payload_len + k * (payload_len - overlap)
     """
-    original_len = len(ternary)  # Huffman payload length in trits
-    header = int_to_fixed_trits(original_len, header_len)  # base-3, fixed 25 trits
+    original_len = len(ternary)
+    header = int_to_fixed_trits(original_len, header_len)
 
     full = header + ternary
     L = len(full)
-    step = payload_len - overlap  # e.g., 80
+    step = payload_len - overlap
 
     if L <= payload_len:
         desired_len = payload_len
     else:
-        # smallest k >= 0 such that payload_len + k * step >= L
         k = (L - payload_len + step - 1) // step
         desired_len = payload_len + k * step
 
@@ -43,7 +40,6 @@ def add_header_and_pad(
     if pad_len < 0:
         raise RuntimeError("Padding logic error: pad_len < 0")
 
-    # '0' trits used as padding; they are ignored via the header on decode
     padding = "0" * pad_len
     return full + padding
 
@@ -52,26 +48,35 @@ def encode_text_to_dna(
     text: str,
     masking_ratio: float,
     huffman_dict_path: Path,
-):
+) -> Dict[str, Any]:
     """
-    TEXT -> semantic gap skeleton -> (dict/rel bytes) -> ternary (Huffman) ->
-    header+padding -> DNA (Goldman)
+    Complete text-to-DNA pipeline:
+    text -> semantic skeleton -> dictionary/relational bytes -> ternary -> DNA
+    
+    Args:
+        text: Input text to encode
+        masking_ratio: Fraction of tokens to mask (0.0-1.0)
+        huffman_dict_path: Path to Huffman dictionary JSON
+    
+    Returns:
+        Dictionary with DNA sequences, skeleton, and metadata
     """
-    # 1) Semantic stage
+    # 1) Semantic encoding: extract important tokens
     encoder = InputEncoder()
-    gap_skeleton = encoder.encode_to_gap_skeleton(text, masking_ratio=masking_ratio)
+    enc_result = encoder.encode(text, masking_ratio=masking_ratio)
+    gap_skeleton = enc_result["gap_skeleton"]
     token_to_id = encoder.build_word_dictionary(gap_skeleton)
 
+    # 2) Serialize dictionary and relational data
     dict_bytes = encoder.serialize_dictionary_to_bytes(token_to_id)
     rel_bytes = encoder.serialize_relational_to_bytes(gap_skeleton, token_to_id)
 
-    # 2) Huffman + header + Goldman stage
+    # 3) Huffman + header + Goldman encoding
     oligo = Oligo(huffman_dict_path)
 
     dict_ternary = oligo.bytes_to_ternary(dict_bytes)
     rel_ternary = oligo.bytes_to_ternary(rel_bytes)
 
-    # Add header + padding so fragmentation can't truncate real data
     dict_ternary_padded = add_header_and_pad(dict_ternary)
     rel_ternary_padded = add_header_and_pad(rel_ternary)
 
@@ -81,14 +86,9 @@ def encode_text_to_dna(
     return {
         "gap_skeleton": gap_skeleton,
         "token_to_id": token_to_id,
-        "dictionary_bytes": dict_bytes,
-        "relational_bytes": rel_bytes,
-        "dict_ternary": dict_ternary,
-        "rel_ternary": rel_ternary,
-        "dict_ternary_padded": dict_ternary_padded,
-        "rel_ternary_padded": rel_ternary_padded,
         "dna_dict_master": dna_dict_master,
         "dna_rel_master": dna_rel_master,
+        "metadata": enc_result["metadata"],
     }
 
 

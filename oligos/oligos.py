@@ -64,10 +64,10 @@ class Oligo:
             )
 
         for i in range(0, full_len, code_len):
-            chunk = ternary[i : i + code_len]
-            if chunk not in self.rev_huff:
-                raise ValueError(f"Unknown Huffman code chunk: {chunk}")
-            decoded.append(self.rev_huff[chunk])
+            segment = ternary[i : i + code_len]
+            if segment not in self.rev_huff:
+                raise ValueError(f"Unknown Huffman code segment: {segment}")
+            decoded.append(self.rev_huff[segment])
 
         return bytes(decoded)
 
@@ -91,7 +91,7 @@ class Oligo:
         return "".join(tern)
 
 
-# ---------- Shared helpers (indexing, RC, orientation, assembly) ----------
+# ---------- Shared helpers (indexing, RC, orientation) ----------
 
 
 def reverse_complement(seq: str) -> str:
@@ -122,50 +122,11 @@ def int_to_fixed_trits(n: int, length: int) -> str:
     return "".join(reversed(digits))
 
 
-def encode_index_trits(file_id: int, fragment_index: int) -> str:
-    """
-    15-trit index:
-        [file_id: 2 trits][fragment_index: 12 trits][parity: 1 trit]
-    parity = (sum of first 14 trits) mod 3
-    """
-    file_trits = int_to_fixed_trits(file_id, 2)
-    frag_trits = int_to_fixed_trits(fragment_index, 12)
-    head = file_trits + frag_trits
-    total = sum(int(ch) for ch in head)
-    parity_trit = str(total % 3)
-    return head + parity_trit
-
-
 def trits_to_int(trits: str) -> int:
     n = 0
     for ch in trits:
         n = n * 3 + int(ch)
     return n
-
-
-def decode_index_trits(index_trits: str) -> Tuple[int, int, bool]:
-    """
-    Inverse of encode_index_trits.
-    Returns:
-        file_id, fragment_index, parity_ok
-    """
-    if len(index_trits) != 15:
-        raise ValueError(f"Index trits must be length 15, got {len(index_trits)}")
-
-    head = index_trits[:14]
-    parity_trit = index_trits[14]
-
-    file_id_trits = head[:2]
-    frag_trits = head[2:]
-
-    file_id = trits_to_int(file_id_trits)
-    fragment_index = trits_to_int(frag_trits)
-
-    total = sum(int(ch) for ch in head)
-    expected_parity = total % 3
-    parity_ok = expected_parity == int(parity_trit)
-
-    return file_id, fragment_index, parity_ok
 
 
 def trits_to_dna_with_prev(prev_base: str, trits: str, oligo_codec: Oligo) -> str:
@@ -202,6 +163,50 @@ def orient_oligo(seq: str) -> str:
         file=sys.stderr,
     )
     return seq
+
+
+# -------------------------------------------------------------------
+# TEXT PIPELINE (version 1 biozip)
+# -------------------------------------------------------------------
+
+
+def encode_index_trits(file_id: int, fragment_index: int) -> str:
+    """
+    15-trit index:
+        [file_id: 2 trits][fragment_index: 12 trits][parity: 1 trit]
+    parity = (sum of first 14 trits) mod 3
+    """
+    file_trits = int_to_fixed_trits(file_id, 2)
+    frag_trits = int_to_fixed_trits(fragment_index, 12)
+    head = file_trits + frag_trits
+    total = sum(int(ch) for ch in head)
+    parity_trit = str(total % 3)
+    return head + parity_trit
+
+
+def decode_index_trits(index_trits: str) -> Tuple[int, int, bool]:
+    """
+    Inverse of encode_index_trits.
+    Returns:
+        file_id, fragment_index, parity_ok
+    """
+    if len(index_trits) != 15:
+        raise ValueError(f"Index trits must be length 15, got {len(index_trits)}")
+
+    head = index_trits[:14]
+    parity_trit = index_trits[14]
+
+    file_id_trits = head[:2]
+    frag_trits = head[2:]
+
+    file_id = trits_to_int(file_id_trits)
+    fragment_index = trits_to_int(frag_trits)
+
+    total = sum(int(ch) for ch in head)
+    expected_parity = total % 3
+    parity_ok = expected_parity == int(parity_trit)
+
+    return file_id, fragment_index, parity_ok
 
 
 def fragment_master_dna(
