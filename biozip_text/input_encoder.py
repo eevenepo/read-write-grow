@@ -1,6 +1,5 @@
 import numpy as np
 import spacy
-from sentence_transformers import SentenceTransformer
 from typing import List, Tuple, Dict, Any, Set
 
 class InputEncoder:
@@ -9,8 +8,8 @@ class InputEncoder:
     Exports the total token number and important tokens with their positions in the paragraph.
     
     Installation:
-    pip install sentence-transformers spacy numpy
-    python -m spacy download en_core_web_sm
+    pip install spacy numpy
+    python -m spacy download en_core_web_md
     """
 
     # ------------------------
@@ -36,23 +35,20 @@ class InputEncoder:
         "NOUN", "PROPN", "ADJ", "VERB", "NUM", "AUX", "PRON"
     }
 
-    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
+    def __init__(self, model_name: str = 'en_core_web_md'):
         """
-        Initialize the encoder with sentence-BERT model and spaCy tokenizer.
+        Initialize the encoder with spaCy model (vectors included).
         Args:
-            model_name: Name of the sentence-transformers model to use
+            model_name: Name of the spaCy model to use (must have vectors, e.g., en_core_web_md)
         """
-        # Load sentence-BERT model (produces 384-dim vectors like in paper)
-        self.bert_model = SentenceTransformer(model_name)
-        
-        # Load spaCy for tokenization
+        # Load spaCy for tokenization and vectors
         try:
-            self.nlp = spacy.load('en_core_web_sm')
+            self.nlp = spacy.load(model_name)
         except OSError:
-            print("Downloading spaCy model...")
+            print(f"Downloading spaCy model {model_name}...")
             import os
-            os.system('python -m spacy download en_core_web_sm')
-            self.nlp = spacy.load('en_core_web_sm')
+            os.system(f'python -m spacy download {model_name}')
+            self.nlp = spacy.load(model_name)
     
     # -------------------------
     # tokenize_text with POS + critical words
@@ -100,18 +96,16 @@ class InputEncoder:
     
     def get_sentence_embedding(self, sentence_tokens: List[Tuple[str, int, int]]) -> np.ndarray:
         """
-        Get sentence-BERT embedding for a sentence.
+        Get embedding for a sentence using spaCy vectors.
         Args:
             sentence_tokens: List of (token, start_idx, end_idx) tuples        
         Returns:
-            384-dimensional sentence embedding
+            300-dimensional sentence embedding (average of token vectors)
         """
         # Reconstruct sentence from tokens
         sentence_text = ' '.join([token[0] for token in sentence_tokens])
-        # Use SentenceTransformer
-        embedding = self.bert_model.encode(sentence_text, convert_to_numpy=True)
-
-        return embedding
+        # Use spaCy vector (average of token vectors)
+        return self.nlp(sentence_text).vector
     
     def cosine_distance(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """
