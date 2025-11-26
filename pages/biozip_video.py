@@ -125,11 +125,30 @@ do_colorize = st.sidebar.checkbox(
     help="Colorize the reconstructed grayscale video using an OpenCV DNN colorizer." + (" (Disabled on Streamlit Cloud)" if is_cloud else ""),
 )
 
+# Show saturation slider only when colorization is enabled
+saturation_boost = 1.2  # default - slightly boosted for better colors
+if do_colorize:
+    saturation_boost = st.sidebar.slider(
+        "Color saturation",
+        min_value=0.5,
+        max_value=2.5,
+        value=1.2,
+        step=0.1,
+        help="Adjust color intensity. 1.0 = original model output, higher = more vivid colors",
+    )
+
 do_upscale = st.sidebar.checkbox(
     "AI upscaling (ESRGAN x4)",
     value=False,
     disabled=is_cloud,
     help="Upscale the video using ESRGAN. This increases resolution and detail." + (" (Disabled on Streamlit Cloud)" if is_cloud else ""),
+)
+
+do_white_balance = st.sidebar.checkbox(
+    "Auto white balance",
+    value=True,
+    disabled=is_cloud or not do_colorize,
+    help="Automatically correct color temperature for more natural colors." + (" (Requires colorization)" if not do_colorize else ""),
 )
 
 if is_cloud:
@@ -331,6 +350,8 @@ with col_decode:
                             fps=fps,
                             do_colorize=do_colorize,
                             do_upscale=do_upscale,
+                            do_white_balance=do_white_balance,
+                            saturation_boost=saturation_boost,
                             target_fps=int(target_fps) if target_fps else None,
                             color_model_dir=str(models_dir),
                             esrgan_model_path=esrgan_model_path

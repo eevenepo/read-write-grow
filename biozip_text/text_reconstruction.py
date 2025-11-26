@@ -33,48 +33,53 @@ def build_reconstruction_prompt(gap_skeleton: Dict[str, Any]) -> str:
         for tok, pos in zip(tokens, positions)
     ]
 
+    # Group tokens by approximate sentence (gaps > 5 often indicate sentence boundaries)
     tokens_with_pos_str = "\n".join(
-        f"- token: `{t['token']}` at approximate position {t['position']}"
+        f"  Position {t['position']:3d}: \"{t['token']}\""
         for t in token_info
     )
 
-    tokens_bow = ", ".join(tokens)
+    tokens_bow = ", ".join(f'"{tok}"' for tok in tokens)
+    
+    # Calculate density info to help the model understand structure
+    num_tokens = len(tokens)
+    avg_gap = sum(gaps) / len(gaps) if gaps else 0
 
-    prompt = f"""
-        You are an expert text reconstruction system. Your task is to reconstruct a coherent, fluent English paragraph 
-        from a compressed semantic skeleton.
+    prompt = f"""You are a precise text reconstruction AI. Your task is to rebuild the ORIGINAL text from a semantic skeleton.
 
-        We have:
-        - A target token length of about {total_tokens} tokens.
-        - A list of important content words that must appear in the reconstructed text.
-        - Approximate positions in the token sequence for each important token (0-based index).
+## CONTEXT
+The original text was compressed by removing common words (articles, prepositions, some verbs) while keeping semantically important words. You must reconstruct a text that:
+1. Contains ALL the important tokens below in the EXACT order given
+2. Sounds natural and grammatically correct
+3. Preserves the FULL meaning and nuance suggested by the token sequence
+4. Matches approximately {total_tokens} total words
 
-        Important tokens and approximate positions:
-        {tokens_with_pos_str}
+## IMPORTANT TOKENS (in order, with their approximate positions)
+{tokens_with_pos_str}
 
-        The important content words (in order) are:
-        {tokens_bow}
+## TOKEN LIST FOR REFERENCE
+{tokens_bow}
 
-        Constraints:
-        1. Include every important token listed above, in roughly this order.
-        2. You may slightly paraphrase around these tokens, but keep the overall meaning as close
-        as possible to the context suggested by the tokens.
-        3. Write **complete, grammatical sentences**. Avoid telegraphic phrases.
-        4. Infer the topic solely from the provided tokens. Do NOT force unrelated topics (like DNA storage) 
-        unless the tokens explicitly suggest them.
-        5. You may add normal English glue words (articles, prepositions, auxiliaries, pronouns,
-        conjunctions, basic adjectives/adverbs) to make the text fluent and natural.
-        6. Keep the overall length close to {total_tokens} tokens (you can be off by a few).
-        7. Aim for a smooth, readable paragraph in a neutral style appropriate for the inferred topic.
+## CRITICAL RULES
+1. **PRESERVE ALL TOKENS**: Every token above MUST appear in your output, in the same order.
+2. **PRESERVE MEANING**: The tokens tell a story - reconstruct that EXACT story, not a summary or paraphrase.
+3. **NATURAL FLOW**: Add articles (the, a, an), prepositions (of, in, to, for), conjunctions (and, but, or), pronouns (it, they, we), and auxiliary verbs (is, are, was, have) to create natural sentences.
+4. **MATCH LENGTH**: Target approximately {total_tokens} words. The gaps between token positions indicate how many filler words were removed.
+5. **SENTENCE STRUCTURE**: Large gaps between positions often indicate sentence boundaries. Respect these natural breaks.
+6. **NO INVENTION**: Do not add new concepts, facts, or ideas not implied by the tokens. Only add grammatical glue words.
+7. **TONE PRESERVATION**: If tokens suggest a specific tone (e.g., "good, bad, ugly" suggests a balanced discussion), preserve that tone.
 
-        Task:
-        Using the important tokens plus reasonable glue words and light, on-topic context,
-        reconstruct a fluent English paragraph that matches the likely original meaning
-        as closely as possible.
+## EXAMPLE
+If tokens are: "Technology", "critical", "world", "today", "communication", "healthcare"
+BAD output: "Technology is important." (too short, loses meaning)
+BAD output: "Technology affects many areas including AI and robotics." (invents new concepts)
+GOOD output: "Technology is a critical component of our world today, from communication to healthcare."
 
-        Output:
-        Only output the reconstructed paragraph, no explanations, no bullet points, no quotes.
-        """
+## YOUR TASK
+Reconstruct the original text using ALL {num_tokens} tokens above. Add only the minimal grammatical words needed to make it flow naturally. The result should read like polished, professional writing.
+
+Output ONLY the reconstructed text, nothing else:"""
+
     return prompt.strip()
 
 

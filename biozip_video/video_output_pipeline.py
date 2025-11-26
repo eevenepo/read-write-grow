@@ -137,17 +137,37 @@ def decode_oligo_pool_to_video(
     fps: int = 12,
     *,
     do_colorize: bool = False,
-    do_upscale: bool = False,   # Added to support Streamlit UI
-    target_fps: int = 24,       # Added to support Streamlit UI
+    do_upscale: bool = False,
+    do_white_balance: bool = True,
+    saturation_boost: float = 1.4,
+    target_fps: int = 24,
     color_model_dir: str | Path = "models",
-    esrgan_model_path: str | Path | None = None, # Added
+    esrgan_model_path: str | Path | None = None,
 ) -> Dict[str, Any]:
     """
     High-level video pipeline (decoder).
+    
+    Args:
+        oligo_seqs: List of DNA oligo sequences
+        huffman_dict_path: Path to Huffman dictionary
+        out_video_path: Output video path
+        payload_len: Oligo payload length
+        overlap: Oligo overlap length
+        width: Video width (for reference)
+        height: Video height (for reference)
+        fps: Original video FPS
+        do_colorize: Whether to apply AI colorization
+        do_upscale: Whether to apply AI upscaling
+        do_white_balance: Whether to apply auto white balance
+        saturation_boost: Color saturation multiplier (1.0 = no change)
+        target_fps: Output FPS after smoothing
+        color_model_dir: Directory with colorization model files
+        esrgan_model_path: Path to ESRGAN model weights
     """
     log("=== BioZip DNA → Video decode start ===")
     log(f"Target Geometry: {width}x{height} @ {fps}fps")
-    log(f"Enhancements: Color={do_colorize}, Upscale={do_upscale}")
+    log(f"Enhancements: Color={do_colorize}, Upscale={do_upscale}, WB={do_white_balance}")
+    log(f"Saturation boost: {saturation_boost}")
 
     # 1) Decode oligos → raw segment bytes
     segment_bytes = decode_oligo_pool_to_segments(
@@ -167,8 +187,6 @@ def decode_oligo_pool_to_video(
     colorized = False
 
     # 3) Optional Enhancement (Color + Upscale + Smooth)
-    # Even if colorize is False, we might want upscaling or smoothing.
-    # We trigger this if ANY enhancement flag is set.
     if do_colorize or do_upscale:
         log("Starting AI enhancement step...")
         grayscale_path = Path(grayscale_out_path)
@@ -180,7 +198,9 @@ def decode_oligo_pool_to_video(
                 output_path=str(enhanced_path),
                 do_colorize=do_colorize,
                 do_upscale=do_upscale,
-                do_smooth=True,  # Always smooth if we are enhancing
+                do_smooth=True,
+                do_white_balance=do_white_balance,
+                saturation_boost=saturation_boost,
                 color_model_dir=color_model_dir,
                 esrgan_model_path=esrgan_model_path,
                 target_fps=target_fps

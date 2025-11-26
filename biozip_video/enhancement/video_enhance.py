@@ -83,70 +83,177 @@ def load_colorization_model(
     return net, pts_in_hull
 
 
-def colorize_frame(frame_bgr: np.ndarray, net: cv2.dnn_Net) -> np.ndarray:
+def _grayscale_to_bw_photo(gray: np.ndarray) -> np.ndarray:
     """
-    Colorize a single BGR frame using the loaded DNN net.
+    Convert a grayscale video frame to look more like a traditional B&W photo.
+    
+    The Zhang colorization model was trained on black & white photographs,
+    which have different characteristics than grayscale video:
+    - Higher contrast
+    - More distinct tonal regions
+    - Histogram closer to full range
+    
+    This preprocessing helps the colorization network produce better results.
     """
-    h, w = frame_bgr.shape[:2]
+    # 1. Histogram equalization to use full tonal range (like developed film)
+    equalized = cv2.equalizeHist(gray)
+    
+    # 2. Blend with original to not be too harsh (50/50 mix)
+    blended = cv2.addWeighted(gray, 0.5, equalized, 0.5, 0)
+    
+    # 3. Apply slight contrast curve (S-curve) for that photo look
+    # This mimics the characteristic curve of photographic film
+    lut = np.zeros(256, dtype=np.uint8)
+    for i in range(256):
+        # S-curve: darken shadows slightly, brighten highlights
+        normalized = i / 255.0
+        # Sigmoid-like curve
+        curved = normalized ** 0.9 if normalized < 0.5 else 1 - (1 - normalized) ** 0.9
+        curved = 0.3 * normalized + 0.7 * curved  # Blend with linear
+        lut[i] = np.clip(int(curved * 255), 0, 255)
+    
+    result = cv2.LUT(blended, lut)
+    
+    return result
 
-    # 1. Preprocessing: Convert to standard normalized float for the model
-    # Ensure 3 channels even if input is effectively gray
+
+def colorize_frame(frame_bgr: np.ndarray, net: cv2.dnn_Net, saturation_boost: float = 1.0) -> np.ndarray:
+    """
+    Colorize a single BGR frame using the Zhang et al. colorization network.
+    
+    This implementation follows the EXACT reference implementation from:
+    https://github.com/AbhilipsaJena/Image_colorization-OpenCV
+    
+    Args:
+        frame_bgr: Input frame in BGR format (grayscale or color)
+        net: Loaded colorization network  
+        saturation_boost: Factor to boost color saturation (1.0 = no change)
+    
+    Returns:
+        Colorized BGR image (uint8)
+    """
+    # Handle grayscale input - convert to BGR
     if frame_bgr.ndim == 2:
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_GRAY2RGB)
-    else:
-        # If already BGR, we convert to RGB for the Lab conversion step
-        # because cv2.COLOR_BGR2Lab expects BGR, but we want to be safe with float ranges.
-        # Actually, let's stick to standard BGR->Lab flow:
-        frame_rgb = frame_bgr
-
-    img_float = frame_rgb.astype("float32") / 255.0
+        frame_bgr = cv2.cvtColor(frame_bgr, cv2.COLOR_GRAY2BGR)
+    elif frame_bgr.ndim == 3 and frame_bgr.shape[2] == 1:
+        frame_bgr = cv2.cvtColor(frame_bgr, cv2.COLOR_GRAY2BGR)
     
-    # OpenCV float32 Lab: L is [0..100], a/b are raw (approx -127..127)
-    img_lab = cv2.cvtColor(img_float, cv2.COLOR_BGR2Lab)
-    L_channel = img_lab[:, :, 0] 
-
-    # 2. Resize L to 224x224 and subtract 50 (model normalization)
-    L_input = cv2.resize(L_channel, (224, 224))
-    L_input -= 50.0
-
-    # 3. Forward pass
-    net.setInput(cv2.dnn.blobFromImage(L_input))
-    ab_dec = net.forward()[0, :, :, :].transpose((1, 2, 0))  # (224, 224, 2)
-
-    # 4. Resize ab back to original resolution
-    ab_upsampled = cv2.resize(ab_dec, (w, h))
-
-    # --- THE FIX IS HERE ---
+    # Store original dimensions
+    H_orig, W_orig = frame_bgr.shape[:2]
     
-    # 5. Robust Merge Strategy (Convert to uint8 manually)
+    # === EXACT Reference Implementation ===
+    # Step 1: Scale image to float32 [0, 1]
+    scaled = frame_bgr.astype("float32") / 255.0
     
-    # L_channel is 0..100. Scale to 0..255 for uint8
-    L_uint8 = np.clip(L_channel * (255.0 / 100.0), 0, 255).astype("uint8")
+    # Step 2: Convert BGR to LAB (note: BGR2LAB, not RGB2Lab)
+    lab = cv2.cvtColor(scaled, cv2.COLOR_BGR2LAB)
     
-    # Optional: Apply CLAHE to L channel to improve local contrast
-    # Reduced clipLimit to 1.0 to avoid "deep fried" look on noisy inputs
-    # Increased tileGridSize to 16x16 for smoother, less patchy contrast
-    clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(16, 16))
-    L_uint8 = clahe.apply(L_uint8)
+    # Step 3: Resize LAB image to network input size (224x224)
+    resized = cv2.resize(lab, (224, 224))
+    
+    # Step 4: Extract L channel from resized image and mean-center
+    L = cv2.split(resized)[0]
+    L -= 50
+    
+    # Step 5: Forward pass through network
+    net.setInput(cv2.dnn.blobFromImage(L))
+    ab = net.forward()[0, :, :, :].transpose((1, 2, 0))
+    
+    # Step 6: Resize ab predictions back to original image size
+    ab = cv2.resize(ab, (W_orig, H_orig))
+    
+    # Step 7: Apply saturation boost if requested
+    if saturation_boost != 1.0:
+        ab = ab * saturation_boost
+    
+    # Step 8: Get L channel from ORIGINAL full-size LAB image
+    L_orig = cv2.split(lab)[0]
+    
+    # Step 9: Concatenate L with predicted ab
+    colorized = np.concatenate((L_orig[:, :, np.newaxis], ab), axis=2)
+    
+    # Step 10: Convert LAB back to BGR
+    colorized = cv2.cvtColor(colorized, cv2.COLOR_LAB2BGR)
+    colorized = np.clip(colorized, 0, 1)
+    
+    # Step 11: Convert back to uint8
+    colorized = (255 * colorized).astype("uint8")
+    
+    return colorized
 
-    # Boost saturation in ab channels
-    # ab is approx -128..127. Multiplying by >1.0 increases saturation.
-    # Increased to 1.1 to combat the "sepia" look of the model
-    saturation_factor = 1.1
-    ab_upsampled = ab_upsampled * saturation_factor
 
-    # ab_upsampled is ALREADY in raw range (approx -110 to 110).
-    # We DO NOT multiply by 128. We only add 128 to center it at 0 for uint8.
-    ab_uint8 = np.clip(ab_upsampled + 128.0, 0, 255).astype("uint8")
+def _suppress_color_artifacts(img_bgr: np.ndarray, threshold: float = 0.4) -> np.ndarray:
+    """
+    Suppress unnatural color artifacts (like random green/magenta patches).
+    
+    Works by detecting pixels with very high saturation in areas that should
+    likely be neutral (gray/brown) and desaturating them.
+    """
+    # Convert to HSV
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV).astype(np.float32)
+    h, s, v = cv2.split(hsv)
+    
+    # Normalize saturation
+    s_norm = s / 255.0
+    
+    # Detect overly saturated pixels (likely artifacts)
+    # Natural beach/sand scenes shouldn't have extremely saturated colors
+    oversaturated_mask = s_norm > threshold
+    
+    # Reduce saturation of these pixels
+    s[oversaturated_mask] = s[oversaturated_mask] * 0.5
+    
+    # Merge and convert back
+    hsv_out = cv2.merge([h, s, v])
+    return cv2.cvtColor(hsv_out.astype("uint8"), cv2.COLOR_HSV2BGR)
 
-    # Merge channels
-    lab_final = cv2.merge([L_uint8, ab_uint8])
 
-    # 6. Convert Lab (uint8) -> BGR
-    # OpenCV handles uint8 Lab strictly: L:0-255, a:0-255, b:0-255 (with 128 bias)
-    bgr_out = cv2.cvtColor(lab_final, cv2.COLOR_Lab2BGR)
+def _apply_color_correction(img_bgr: np.ndarray, saturation: float = 1.0, contrast: float = 1.0) -> np.ndarray:
+    """
+    Apply color correction adjustments to an image.
+    
+    Args:
+        img_bgr: Input BGR image
+        saturation: Saturation multiplier (1.0 = no change)
+        contrast: Contrast multiplier (1.0 = no change)
+    """
+    # Convert to HSV for saturation adjustment
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV).astype("float32")
+    
+    # Adjust saturation
+    hsv[:, :, 1] = np.clip(hsv[:, :, 1] * saturation, 0, 255)
+    
+    # Convert back
+    result = cv2.cvtColor(hsv.astype("uint8"), cv2.COLOR_HSV2BGR)
+    
+    # Adjust contrast
+    if contrast != 1.0:
+        result = cv2.convertScaleAbs(result, alpha=contrast, beta=0)
+    
+    return result
 
-    return bgr_out
+
+def _auto_white_balance(img_bgr: np.ndarray) -> np.ndarray:
+    """
+    Apply automatic white balance using the gray world assumption.
+    This helps correct color casts from the colorization model.
+    """
+    # Calculate channel means
+    b, g, r = cv2.split(img_bgr.astype("float32"))
+    
+    # Gray world: assume average color should be gray
+    avg_b, avg_g, avg_r = np.mean(b), np.mean(g), np.mean(r)
+    avg_gray = (avg_b + avg_g + avg_r) / 3.0
+    
+    if avg_gray < 1:
+        return img_bgr
+    
+    # Scale each channel
+    b = np.clip(b * (avg_gray / max(avg_b, 1)), 0, 255)
+    g = np.clip(g * (avg_gray / max(avg_g, 1)), 0, 255)
+    r = np.clip(r * (avg_gray / max(avg_r, 1)), 0, 255)
+    
+    return cv2.merge([b, g, r]).astype("uint8")
 
 # -------------------------------------------------------------------------
 # ESRGAN Upscaling (optional)
@@ -154,18 +261,15 @@ def colorize_frame(frame_bgr: np.ndarray, net: cv2.dnn_Net) -> np.ndarray:
 
 class ESRGANUpscaler:
     """
-    Wrapper around Real-ESRGAN with added sharpening to prevent 
-    the "watercolor/oil-painting" effect on low-res inputs.
+    Wrapper around Real-ESRGAN for 4x upscaling.
     """
 
     def __init__(self, model_path: str | Path, device: str = "cuda"):
         global ESRGAN_AVAILABLE, ESRGAN_IMPORT_ERROR
 
         try:
-            # Use local RRDBNet implementation to avoid basicsr dependency
             from biozip_video.rrdbnet_arch import RRDBNet
             import torch
-            from torch.nn import functional as F
         except Exception as e:
             ESRGAN_AVAILABLE = False
             ESRGAN_IMPORT_ERROR = e
@@ -183,16 +287,24 @@ class ESRGANUpscaler:
         if not model_path.exists():
             raise FileNotFoundError(f"ESRGAN model file not found: {model_path}")
 
-        # standard RealESRGAN_x4plus architecture
+        # RRDBNet architecture for RealESRGAN_x4plus
         self.model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32)
         
         try:
-            loadnet = torch.load(str(model_path), map_location=torch.device(device))
+            loadnet = torch.load(str(model_path), map_location=torch.device(device), weights_only=True)
             if 'params_ema' in loadnet:
                 keyname = 'params_ema'
-            else:
+            elif 'params' in loadnet:
                 keyname = 'params'
-            self.model.load_state_dict(loadnet[keyname], strict=True)
+            else:
+                # Direct state dict
+                keyname = None
+            
+            if keyname:
+                self.model.load_state_dict(loadnet[keyname], strict=True)
+            else:
+                self.model.load_state_dict(loadnet, strict=True)
+            
             self.model.eval()
             self.model = self.model.to(device)
         except Exception as e:
@@ -203,9 +315,13 @@ class ESRGANUpscaler:
         ESRGAN_AVAILABLE = True
         logger.info(f"Loaded ESRGAN model from {model_path} on device={device}")
 
-    def upscale(self, frame_bgr: np.ndarray) -> np.ndarray:
+    def upscale(self, frame_bgr: np.ndarray, sharpen_amount: float = 0.5) -> np.ndarray:
         """
-        Upscale 4x and apply sharpening to reduce 'plastic' look.
+        Upscale 4x with post-processing for sharper, more natural results.
+        
+        Args:
+            frame_bgr: Input frame in BGR format
+            sharpen_amount: Amount of sharpening (0.0-1.0, default 0.5)
         """
         # 1. AI Upscale
         # Pre-process: BGR -> RGB, 0-255 -> 0-1, HWC -> CHW
@@ -224,14 +340,27 @@ class ESRGANUpscaler:
         output = (output * 255.0).round().astype(np.uint8)
         out_bgr = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
 
-        # 2. Post-Process: Unsharp Mask (Sharpening)
-        # The AI tends to over-smooth low-res video. We add clarity back.
-        # Increased strength to 1.3 since we are now denoising the input first.
-        gaussian = cv2.GaussianBlur(out_bgr, (0, 0), 2.0)
-        out_sharpened = cv2.addWeighted(out_bgr, 1.3, gaussian, -0.3, 0)
+        # 2. Multi-scale sharpening for better detail restoration
+        if sharpen_amount > 0:
+            # Convert to float for processing
+            img_float = out_bgr.astype(np.float32)
+            
+            # Multi-scale unsharp mask: combine fine and coarse details
+            # Fine details (small sigma)
+            blur_fine = cv2.GaussianBlur(img_float, (0, 0), 1.0)
+            detail_fine = img_float - blur_fine
+            
+            # Medium details
+            blur_medium = cv2.GaussianBlur(img_float, (0, 0), 2.0)
+            detail_medium = img_float - blur_medium
+            
+            # Combine: original + weighted details
+            # Fine details get more weight for sharpness
+            sharpened = img_float + detail_fine * sharpen_amount * 1.5 + detail_medium * sharpen_amount * 0.5
+            
+            out_bgr = np.clip(sharpened, 0, 255).astype("uint8")
         
-        # Clip to valid range just in case
-        return np.clip(out_sharpened, 0, 255).astype("uint8")
+        return out_bgr
 
 
 def upscale_frame_bicubic(frame_bgr: np.ndarray, scale: int = 2) -> np.ndarray:
@@ -263,12 +392,31 @@ def enhance_video(
     do_colorize: bool = True,
     do_upscale: bool = False,
     do_smooth: bool = True,
+    do_white_balance: bool = True,
     smooth_alpha: float = 0.3,
+    saturation_boost: float = 1.4,
     color_model_dir: str | Path = "models",
     esrgan_model_path: str | Path | None = None,
     esrgan_device: str = "cuda",
     target_fps: Optional[float] = None,
 ) -> str:
+    """
+    Enhance a video with colorization, upscaling, and temporal smoothing.
+    
+    Args:
+        input_path: Path to input video
+        output_path: Path for output video
+        do_colorize: Whether to apply AI colorization
+        do_upscale: Whether to apply AI upscaling (4x with ESRGAN or 2x bicubic)
+        do_smooth: Whether to apply temporal smoothing
+        do_white_balance: Whether to apply automatic white balance
+        smooth_alpha: Smoothing strength (higher = more smoothing)
+        saturation_boost: Color saturation multiplier (1.0 = no change)
+        color_model_dir: Directory containing colorization model files
+        esrgan_model_path: Path to ESRGAN model weights
+        esrgan_device: Device for ESRGAN ('cuda' or 'cpu')
+        target_fps: Target FPS for output (None = keep original)
+    """
     input_path_p = Path(input_path)
     if not input_path_p.exists():
         raise FileNotFoundError(f"Input video not found: {input_path}")
@@ -325,35 +473,40 @@ def enhance_video(
             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
 
         # -------------------------------------------------------
-        # STEP 0: PRE-PROCESSING (Deblocking / Denoising)
+        # STEP 0: ENSURE TRUE GRAYSCALE
         # -------------------------------------------------------
-        # High CRF (40) leaves blocking artifacts. We lightly denoise 
-        # the low-res input to help the AI models focus on structure.
-        if do_colorize or do_upscale:
-            # h=3 is subtle enough to keep details but smooth out block noise
-            frame = cv2.fastNlMeansDenoising(frame, None, h=3.0, templateWindowSize=7, searchWindowSize=21)
+        # The decoded video might have slight color variations from compression
+        # Convert to grayscale and back to ensure clean input
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
         # -------------------------------------------------------
-        # STEP 1: COLORIZATION (Run on original resolution first)
+        # STEP 1: UPSCALING FIRST (on grayscale - gives better results)
         # -------------------------------------------------------
-        if do_colorize:
-            if color_net is not None:
-                try:
-                    frame = colorize_frame(frame, color_net)
-                except Exception as e:
-                    logger.error(f"Colorization failed frame {frame_idx}: {e}")
-
-        # -------------------------------------------------------
-        # STEP 2: UPSCALING (Run on the colorized frame)
-        # -------------------------------------------------------
+        # Upscaling the grayscale first gives the colorizer more detail to work with
         if do_upscale:
             try:
                 if esrgan is not None:
-                    frame = esrgan.upscale(frame)
+                    frame = esrgan.upscale(frame, sharpen_amount=0.5)
                 else:
                     frame = upscale_frame_bicubic(frame, scale=upscale_scale)
             except Exception as e:
                 logger.error(f"Upscaling failed frame {frame_idx}: {e}")
+
+        # -------------------------------------------------------
+        # STEP 2: COLORIZATION (on upscaled frame for better quality)
+        # -------------------------------------------------------
+        if do_colorize and color_net is not None:
+            try:
+                frame = colorize_frame(frame, color_net, saturation_boost=saturation_boost)
+            except Exception as e:
+                logger.error(f"Colorization failed frame {frame_idx}: {e}")
+        
+        # -------------------------------------------------------
+        # STEP 3: WHITE BALANCE (Optional color correction)
+        # -------------------------------------------------------
+        if do_white_balance and do_colorize:
+            frame = _auto_white_balance(frame)
         
         processed_frames.append(frame)
 
