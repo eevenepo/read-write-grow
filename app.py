@@ -1,8 +1,11 @@
 """BioZip: DNA-based data storage application landing page."""
 import streamlit as st
+from PIL import Image
+
 st.set_page_config(
     page_title="BioZip",
     page_icon="🧬",
+    layout="wide",
 )
 
 # -------------- Global Styles -----------------
@@ -19,129 +22,199 @@ st.markdown(
         div.stButton > button {
             background: #0b3d91;
             color: #ffffff;
-            padding: 0.6rem 1.4rem;
-            border-radius: 8px;
+            padding: 0.75rem 2rem;
+            border-radius: 12px;
             border: none;
             font-weight: 600;
+            font-size: 1.1rem;
             cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
         }
 
         div.stButton > button:hover {
             background: #1053c4;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(11, 61, 145, 0.2);
+        }
+
+        /* Card styling */
+        .feature-card {
+            background-color: #f8f9fa;
+            padding: 2rem;
+            border-radius: 16px;
+            border: 1px solid #e9ecef;
+            height: 100%;
+        }
+        
+        h1 {
+            color: #0b3d91;
+            font-weight: 700;
+        }
+        
+        h3 {
+            color: #2c3e50;
         }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+# -------------- Sidebar -----------------
+with st.sidebar:
+    try:
+        logo = Image.open("assets/logo.png")
+        st.image(logo, use_container_width=True)
+    except FileNotFoundError:
+        st.warning("Logo not found")
+    
+    st.markdown("---")
+    st.markdown("### Navigation")
+    st.page_link("app.py", label="Home", icon="🏠")
+    st.page_link("pages/biozip_text.py", label="Text Pipeline", icon="📝")
+    st.page_link("pages/biozip_video.py", label="Video Pipeline", icon="🎬")
+    st.page_link("pages/technical_details.py", label="Architecture", icon="⚙️")
+
 # -------------- Hero Section -----------------
-st.markdown(
-    """
-    # Unlock the Future of Data Storage
+col_hero_text, col_hero_img = st.columns([1.5, 1])
 
-    Harness the power of DNA to store massive amounts of data in a fraction of the space.  
-    BioZip offers DNA as a secure and sustainable data medium, built to last for millennia.
+with col_hero_text:
+    st.markdown("# Unlock the Future of Data Storage")
+    st.markdown(
+        """
+        <div style="font-size: 1.2rem; line-height: 1.6; color: #555; margin-bottom: 2rem;">
+        Harness the power of DNA to store massive amounts of data in a fraction of the space.  
+        BioZip offers DNA as a secure and sustainable data medium, built to last for millennia.
+        <br><br>
+        <b>Store Smarter. Store Forever.</b>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    # Hero CTAs
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("📝 Try Text Demo", key="hero_text_demo"):
+            st.switch_page("pages/biozip_text.py")
+    with c2:
+        if st.button("🎬 Try Video Demo", key="hero_video_demo"):
+            st.switch_page("pages/biozip_video.py")
 
-    **Store Smarter. Store Forever.**
-    """
-)
-
-st.markdown("### Choose a demo to explore:")
-
-# Top CTAs → go to demos
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("#### BioZip Text")
-    st.write("Store and reconstruct documents using semantic compression + DNA encoding.")
-    if st.button("Try Text Demo", key="hero_text_demo"):
-        # This must match your file in `pages/`
-        st.switch_page("pages/biozip_text.py")
-
-with col2:
-    st.markdown("#### BioZip Video")
-    st.write("Compress, segment and encode video into DNA oligos, then reconstruct the file.")
-    if st.button("Try Video Demo", key="hero_video_demo"):
-        # This must match your file in `pages/`
-        st.switch_page("pages/biozip_video.py")
+with col_hero_img:
+    try:
+        # Display logo prominently in hero if available, or a nice graphic
+        st.image("assets/logo.png", width=400)
+    except:
+        st.markdown("🧬")
 
 st.markdown("---")
 
 # -------------- Story Sections -----------------
 with st.container():
-    txt, img = st.columns(2)
+    txt, img = st.columns([1, 1], gap="large")
     with img:
-        st.markdown(
-            "![DNA gif](https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzhmeHQ3ZXA5dnB6dzF3ZmF0Mm5wenhmemp1ODc1MnRqZzBvbDR5cyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pOEbLRT4SwD35IELiQ/giphy.gif)"
-        )
+        st.image("https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzhmeHQ3ZXA5dnB6dzF3ZmF0Mm5wenhmemp1ODc1MnRqZzBvbDR5cyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pOEbLRT4SwD35IELiQ/giphy.gif", use_container_width=True)
 
     with txt:
+        st.markdown("### The Age of Data")
         st.markdown(
             """
-            ### The age of data
             While our need for data storage has grown exponentially, this has come at a cost.  
             Modern data centers consume huge amounts of energy, cause pollution, and fragment habitats.
+            
+            We need a solution that scales with humanity without destroying our home.
             """
         )
 
+st.markdown("<br>", unsafe_allow_html=True)
+
 with st.container():
-    img, txt = st.columns(2)
+    img, txt = st.columns([1, 1], gap="large")
     with img:
-        st.markdown(
-            "![Nature gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2p3c2V0dXk5eDc0d2ZjdTZoaHdjY253cGtkcW5lbWF5OWRoMTUweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8NdQyUi0C7ug0/giphy.gif)"
-        )
+        st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2p3c2V0dXk5eDc0d2ZjdTZoaHdjY253cGtkcW5lbWF5OWRoMTUweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8NdQyUi0C7ug0/giphy.gif", use_container_width=True)
     with txt:
+        st.markdown("### Nature's Oldest Database")
         st.markdown(
             """
-            ### Nature's oldest database
-            Unlike magnetic disks, DNA boasts extreme resilience, lasting up to 1,000,000 years.
+            Unlike magnetic disks that degrade in decades, DNA boasts extreme resilience.
+            
+            *   **Density:** Store the world's data in a shoebox.
+            *   **Durability:** Lasts for 1,000,000+ years in cold storage.
+            *   **Sustainability:** Biodegradable and zero-energy at rest.
             """
         )
 
 # -------------- Features -----------------
-st.markdown("## Why DNA?")
+st.markdown("---")
+st.markdown("<h2 style='text-align: center;'>Why DNA?</h2>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
 with st.container():
     resilience, eco, space = st.columns(3)
 
     with resilience:
         st.markdown(
             """
-            ### Resilience 💾  
-            In good conditions, DNA can last over 1,000,000+ years (!)
-            """
+            <div class="feature-card">
+                <h3>💾 Resilience</h3>
+                <p>In good conditions, DNA can last over 1,000,000+ years. No more data rot or migration headaches.</p>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
     with eco:
         st.markdown(
             """
-            ### Eco-friendly 🌱  
-            DNA storage requires no power, and the sequences are completely biodegradable.
-            """
+            <div class="feature-card">
+                <h3>🌱 Eco-friendly</h3>
+                <p>DNA storage requires no power to maintain data. It's the ultimate cold storage solution.</p>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
     with space:
         st.markdown(
             """
-            ### The data of space 🚀  
-            The knowledge of humankind to the stars, in the size of a phone.
-            """
+            <div class="feature-card">
+                <h3>🚀 Universal</h3>
+                <p>As long as there is life, we will know how to read DNA. It is the only truly future-proof format.</p>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-# -------------- Bottom CTA -----------------
-st.markdown("## Convinced? Pick your pipeline :dna:")
+st.markdown("---")
 
-bottom_col1, bottom_col2 = st.columns(2)
+# -------------- Bottom CTA -----------------
+st.markdown("<h2 style='text-align: center;'>Ready to Encode?</h2>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
+bottom_col1, bottom_col2, bottom_col3 = st.columns([1, 1, 1])
 
 with bottom_col1:
-    st.markdown("#### Text pipeline")
-    st.write("Semantic compression → token skeleton → DNA → LLM-based reconstruction.")
+    st.info("**Text Pipeline**\n\nSemantic compression → token skeleton → DNA.")
     if st.button("Go to Text Demo", key="bottom_text_demo"):
         st.switch_page("pages/biozip_text.py")
 
 with bottom_col2:
-    st.markdown("#### Video pipeline")
-    st.write("Grayscale compression → temporal segmentation → DNA round-trip for video files.")
+    st.info("**Video Pipeline**\n\nGrayscale compression → DNA → AI Restoration.")
     if st.button("Go to Video Demo", key="bottom_video_demo"):
         st.switch_page("pages/biozip_video.py")
 
-st.write("📧 Contact: support@biozip.com | © 2025 BioZip")
+with bottom_col3:
+    st.info("**Technical Details**\n\nDeep dive into our algorithms and architecture.")
+    if st.button("View Architecture", key="bottom_tech_demo"):
+        st.switch_page("pages/technical_details.py")
+
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style='text-align: center; color: #666;'>
+        📧 Contact: support@biozip.com | © 2025 BioZip
+    </div>
+    """, 
+    unsafe_allow_html=True
+)

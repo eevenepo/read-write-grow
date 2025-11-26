@@ -34,6 +34,10 @@ def prepare_grayscale_segments(
 
     compressed_path = work_dir_path / "compressed_gray.mp4"
 
+    # Calculate GOP size to ensure keyframes align with segment boundaries
+    # This prevents "partial picture" issues when splitting with -c copy
+    gop_size = fps * segment_seconds
+
     compress_to_grayscale(
         input_path=input_video,
         output_path=str(compressed_path),
@@ -41,6 +45,7 @@ def prepare_grayscale_segments(
         height=height,
         crf=crf,
         fps=fps,
+        gop_size=gop_size,
     )
 
     segments_dir = work_dir_path / "segments"

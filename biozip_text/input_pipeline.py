@@ -1,6 +1,7 @@
 """Text encoding pipeline: text -> semantic skeleton -> DNA oligos."""
 from pathlib import Path
 from typing import Dict, Any
+import zlib
 
 from biozip_text.input_encoder import InputEncoder
 from oligos.oligos import Oligo, fragment_master_dna, int_to_fixed_trits
@@ -70,6 +71,10 @@ def encode_text_to_dna(
     # 2) Serialize dictionary and relational data
     dict_bytes = encoder.serialize_dictionary_to_bytes(token_to_id)
     rel_bytes = encoder.serialize_relational_to_bytes(gap_skeleton, token_to_id)
+
+    # Compress bytes with zlib before encoding to DNA
+    dict_bytes = zlib.compress(dict_bytes)
+    rel_bytes = zlib.compress(rel_bytes)
 
     # 3) Huffman + header + Goldman encoding
     oligo = Oligo(huffman_dict_path)

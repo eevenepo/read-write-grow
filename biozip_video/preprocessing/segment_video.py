@@ -25,7 +25,8 @@ def segment_video(
     segment_seconds: int = 2,
 ) -> list[str]:
     """
-    Split compressed grayscale video into time-based segments.
+    Split compressed grayscale video into time-based segments using ffmpeg segment muxer.
+    This ensures splits happen cleanly at keyframes.
 
     - compressed_path: input preprocessed (grayscale) video
     - out_dir: directory to store segments
@@ -37,28 +38,29 @@ def segment_video(
     out_dir_path = Path(out_dir)
     out_dir_path.mkdir(parents=True, exist_ok=True)
 
-    duration = get_video_duration(compressed_path)
-    n_segments = math.ceil(duration / segment_seconds)
+    # Clean up existing segments to avoid confusion
+    for p in out_dir_path.glob("segment_*.mp4"):
+        p.unlink()
 
-    segment_paths: list[str] = []
+    # Output pattern for segment muxer
+    out_pattern = out_dir_path / "segment_%04d.mp4"
 
-    for i in range(n_segments):
-        start = i * segment_seconds
-        out_path = out_dir_path / f"segment_{i:04d}.mp4"
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", compressed_path,
+        "-c", "copy",
+        "-f", "segment",
+        "-segment_time", str(segment_seconds),
+        "-reset_timestamps", "1",
+        str(out_pattern),
+    ]
+    
+    print("Running command:", " ".join(cmd))
+    subprocess.run(cmd, check=True)
 
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-ss", str(start),
-            "-t", str(segment_seconds),
-            "-i", compressed_path,
-            "-c", "copy",
-            str(out_path),
-        ]
-        print("Running command:", " ".join(cmd))
-        subprocess.run(cmd, check=True)
-        segment_paths.append(str(out_path))
-
+    # Collect generated files
+    segment_paths = sorted(str(p) for p in out_dir_path.glob("segment_*.mp4"))
     return segment_paths
 
 def concat_segments(segment_paths: list[str], out_path: str) -> str:

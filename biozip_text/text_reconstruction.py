@@ -41,12 +41,12 @@ def build_reconstruction_prompt(gap_skeleton: Dict[str, Any]) -> str:
     tokens_bow = ", ".join(tokens)
 
     prompt = f"""
-        You are reconstructing an English paragraph from a compressed semantic skeleton
-        of a short popular-science text about DNA data storage.
+        You are an expert text reconstruction system. Your task is to reconstruct a coherent, fluent English paragraph 
+        from a compressed semantic skeleton.
 
         We have:
         - A target token length of about {total_tokens} tokens.
-        - A list of important content words that should appear in the reconstructed text.
+        - A list of important content words that must appear in the reconstructed text.
         - Approximate positions in the token sequence for each important token (0-based index).
 
         Important tokens and approximate positions:
@@ -58,16 +58,14 @@ def build_reconstruction_prompt(gap_skeleton: Dict[str, Any]) -> str:
         Constraints:
         1. Include every important token listed above, in roughly this order.
         2. You may slightly paraphrase around these tokens, but keep the overall meaning as close
-        as possible to the kind of text suggested by the tokens.
-        3. Write **complete, grammatical sentences**. Avoid telegraphic phrases like
-        "massive amounts, durable medium"; instead write fully natural phrases such as
-        "massive amounts of information in a compact, durable medium".
-        4. Do NOT introduce unrelated domains (e.g. AI models, robots, medicine) that are not
-        suggested by the tokens.
+        as possible to the context suggested by the tokens.
+        3. Write **complete, grammatical sentences**. Avoid telegraphic phrases.
+        4. Infer the topic solely from the provided tokens. Do NOT force unrelated topics (like DNA storage) 
+        unless the tokens explicitly suggest them.
         5. You may add normal English glue words (articles, prepositions, auxiliaries, pronouns,
         conjunctions, basic adjectives/adverbs) to make the text fluent and natural.
         6. Keep the overall length close to {total_tokens} tokens (you can be off by a few).
-        7. Aim for a smooth, readable paragraph in a neutral popular-science style.
+        7. Aim for a smooth, readable paragraph in a neutral style appropriate for the inferred topic.
 
         Task:
         Using the important tokens plus reasonable glue words and light, on-topic context,

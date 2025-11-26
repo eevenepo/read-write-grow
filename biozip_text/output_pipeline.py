@@ -3,6 +3,9 @@
 from pathlib import Path
 from typing import List, Dict, Any
 import sys
+import os
+import zlib
+from dotenv import load_dotenv
 
 from biozip_text.text_reconstruction import reconstruct_text_with_gemini
 from oligos.oligos import (
@@ -298,6 +301,15 @@ def decode_oligo_pool_to_skeleton(
     dict_bytes = oligo_codec.ternary_to_bytes(dict_ternary)
     rel_bytes = oligo_codec.ternary_to_bytes(rel_ternary)
 
+    # Decompress bytes with zlib
+    try:
+        dict_bytes = zlib.decompress(dict_bytes)
+        rel_bytes = zlib.decompress(rel_bytes)
+    except zlib.error as e:
+        print(f"WARNING: zlib decompression failed: {e}", file=sys.stderr)
+        # Fallback or re-raise depending on desired robustness
+        raise
+
     # 5) bytes -> dictionary + skeleton
     id_to_word = parse_dictionary_bytes(dict_bytes)
     gap_skeleton = parse_relational_bytes_to_skeleton(rel_bytes, id_to_word)
@@ -306,7 +318,7 @@ def decode_oligo_pool_to_skeleton(
 
 
 if __name__ == "__main__":
-    from input_pipeline import encode_text_to_dna
+    from .input_pipeline import encode_text_to_dna
     from oligos.oligos import fragment_master_dna
 
     text = """
@@ -346,17 +358,18 @@ if __name__ == "__main__":
     print("DECODED skeleton:", decoded_skeleton)
 
     # ---- LLM reconstruction with Gemini ----
+    load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("Please set GEMINI_API_KEY environment variable")
+        print("WARNING: GEMINI_API_KEY not found. Skipping LLM reconstruction step.", file=sys.stderr)
+    else:
+        reconstructed = reconstruct_text_with_gemini(
+            decoded_skeleton,
+            api_key=api_key,
+            model_name="gemini-2.5-flash",
+        )
 
-    reconstructed = reconstruct_text_with_gemini(
-        decoded_skeleton,
-        api_key=api_key,
-        model_name="gemini-2.5-flash",
-    )
-
-    print("\nOriginal text:")
-    print(text)
-    print("\nReconstructed text (from decoded skeleton):")
-    print(reconstructed)
+        print("\nOriginal text:")
+        print(text)
+        print("\nReconstructed text (from decoded skeleton):")
+        print(reconstructed)

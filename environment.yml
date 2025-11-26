@@ -1,10 +1,15 @@
 name: rwg-env
 channels:
+  - pytorch
   - conda-forge
   - defaults
 dependencies:
   - python=3.11        # 3.11 is supported by spaCy
   - pip
+  - ffmpeg
+  - pytorch
+  - torchvision
+  - torchaudio
   - pip:
       - numpy<2
       - spacy==3.7.4
@@ -17,3 +22,17 @@ dependencies:
       - python-dotenv
       - tqdm
       - pydantic>=2.0
+      - opencv-python
+      - basicsr
+      - realesrgan
+      - pandas
+      - altair
+      - watchdog
+      - pillow
+      - scikit-image
+      - lmdb
+      - pyyaml
+      - tb-nightly
+      - future
+      - addict
+      - yapf

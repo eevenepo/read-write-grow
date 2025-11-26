@@ -9,6 +9,7 @@ def compress_to_grayscale(
     height: int = 90,
     crf: int = 40,
     fps: int | None = None,
+    gop_size: int | None = None,
 ) -> str:
     """
     Convert the input video to a tiny grayscale, downscaled video using x265.
@@ -18,6 +19,8 @@ def compress_to_grayscale(
     - width, height: target resolution (e.g. 160x90)
     - crf: quality factor (35–45 is strong compression, higher = smaller file)
     - fps: optional; if set, forces a target fps (e.g. 12)
+    - gop_size: optional; if set, forces a fixed Group of Pictures size (keyframe interval).
+                Crucial for segmenting video without re-encoding.
 
     Returns: output_path
     """
@@ -42,8 +45,18 @@ def compress_to_grayscale(
         "-preset", "slow",    # better compression (you can set "medium" if needed)
         "-crf", str(crf),
         "-an",                # no audio
-        output_path,
+        "-pix_fmt", "yuv420p", # Ensure compatibility
     ]
+
+    # Force fixed GOP if requested (essential for clean segmentation)
+    if gop_size is not None:
+        cmd.extend([
+            "-g", str(gop_size),
+            "-keyint_min", str(gop_size),
+            "-sc_threshold", "0",  # Disable scene change detection to enforce strict GOP
+        ])
+
+    cmd.append(output_path)
 
     print("Running command:", " ".join(cmd))
     subprocess.run(cmd, check=True)

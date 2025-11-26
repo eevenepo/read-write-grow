@@ -1,12 +1,32 @@
-numpy
-spacy
+numpy<2
+spacy==3.7.4
 sentence-transformers
-streamlit
+streamlit>=1.26
 google-generativeai
 biopython
 bitstring
 python-dotenv
 tqdm
+pydantic>=2.0
+opencv-python
+torch
+torchvision
+torchaudio
+basicsr
+realesrgan
+# Streamlit & Data
+pandas
+altair
+watchdog
+pillow
+# Basicsr dependencies (explicit to avoid issues)
+scikit-image
+lmdb
+pyyaml
+tb-nightly
+future
+addict
+yapf
 
 # spaCy English model:
 # This line allows pip to install the model directly

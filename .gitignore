@@ -1,1 +1,4 @@
 .venv/
+.venv311/
+models/*.pth
+models/*.caffemodel
