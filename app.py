@@ -23,7 +23,7 @@ apply_theme()
 with st.sidebar:
     try:
         logo = Image.open("assets/logo.png")
-        st.image(logo, use_container_width=True)
+        st.image(logo, width="stretch")
     except FileNotFoundError:
         st.warning("Logo not found")
     
@@ -41,7 +41,7 @@ with col_hero_text:
     st.markdown("# Unlock the Future of Data Storage")
     st.markdown(
         """
-        <div style="font-size: 1.2rem; line-height: 1.6; color: #555; margin-bottom: 2rem;">
+        <div style="font-size: 1.2rem; line-height: 1.6; margin-bottom: 2rem;">
         Harness the power of DNA to store massive amounts of data in a fraction of the space.  
         BioZip offers DNA as a secure and sustainable data medium, built to last for millennia.
         <br><br>
@@ -73,7 +73,7 @@ st.markdown("---")
 with st.container():
     txt, img = st.columns([1, 1], gap="large")
     with img:
-        st.image("https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzhmeHQ3ZXA5dnB6dzF3ZmF0Mm5wenhmemp1ODc1MnRqZzBvbDR5cyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pOEbLRT4SwD35IELiQ/giphy.gif", use_container_width=True)
+        st.image("https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzhmeHQ3ZXA5dnB6dzF3ZmF0Mm5wenhmemp1ODc1MnRqZzBvbDR5cyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pOEbLRT4SwD35IELiQ/giphy.gif", width="stretch")
 
     with txt:
         st.markdown("### The Age of Data")
@@ -91,7 +91,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 with st.container():
     img, txt = st.columns([1, 1], gap="large")
     with img:
-        st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2p3c2V0dXk5eDc0d2ZjdTZoaHdjY253cGtkcW5lbWF5OWRoMTUweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8NdQyUi0C7ug0/giphy.gif", use_container_width=True)
+        st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2p3c2V0dXk5eDc0d2ZjdTZoaHdjY253cGtkcW5lbWF5OWRoMTUweSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8NdQyUi0C7ug0/giphy.gif", width="stretch")
     with txt:
         st.markdown("### Nature's Oldest Database")
         st.markdown(
@@ -171,7 +171,7 @@ with bottom_col3:
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown(
     """
-    <div style='text-align: center; color: #666;'>
+    <div style='text-align: center; opacity: 0.7;'>
         📧 Contact: support@biozip.com | © 2025 BioZip
     </div>
     """, 

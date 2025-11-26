@@ -59,7 +59,7 @@ with col_hero_text:
     st.title("Text Pipeline")
     st.markdown(
         """
-        <div style="font-size: 1.1rem; color: #555; margin-bottom: 1rem;">
+        <div style="font-size: 1.1rem; margin-bottom: 1rem;">
         Experience the power of <b>Semantic Compression</b>. We don't just store bits; we store meaning.
         By stripping away non-essential words and using AI to reconstruct them later, we achieve 
         unprecedented density for DNA storage.
@@ -84,7 +84,7 @@ st.markdown("---")
 with st.sidebar:
     try:
         logo = Image.open("assets/logo.png")
-        st.image(logo, use_container_width=True)
+        st.image(logo, width="stretch")
     except FileNotFoundError:
         pass
     
@@ -178,14 +178,16 @@ with col_encode:
                     cost = Config.DEFAULT_COST_PER_NT * total_bases
                     st.markdown(
                         f"""
-                        <div style="background-color: #e8f4f8; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                            <h4 style="margin:0; color: #0b3d91;">💰 Estimated Cost: {format_cost_estimate(Config.DEFAULT_COST_PER_NT, total_bases)}</h4>
-                            <div style="font-size: 0.9rem; opacity: 0.8;">@ {Config.DEFAULT_COST_PER_NT} €/nt</div>
-                            <hr style="margin: 0.5rem 0;">
-                            <b>Stats:</b><br>
-                            • Total oligos: {stats['total_oligos']}<br>
-                            • Total bases: {stats['total_bases']}<br>
-                            • Avg length: {stats['average_length']:.0f} nt
+                        <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); padding: 1rem; margin-top: 1rem; box-shadow: 4px 4px 0px var(--shadow-color);">
+                            <h4 style="margin:0; color: var(--text-color);">💰 Estimated Cost: {format_cost_estimate(Config.DEFAULT_COST_PER_NT, total_bases)}</h4>
+                            <div style="font-size: 0.9rem; opacity: 0.8; color: var(--text-color);">@ {Config.DEFAULT_COST_PER_NT} €/nt</div>
+                            <hr style="margin: 0.5rem 0; border-top: 1px solid var(--border-color);">
+                            <div style="color: var(--text-color);">
+                                <b>Stats:</b><br>
+                                • Total oligos: {stats['total_oligos']}<br>
+                                • Total bases: {stats['total_bases']}<br>
+                                • Avg length: {stats['average_length']:.0f} nt
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True,

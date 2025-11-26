@@ -19,7 +19,7 @@ if st.button("← Back to Home"):
 with st.sidebar:
     try:
         logo = Image.open("assets/logo.png")
-        st.image(logo, use_container_width=True)
+        st.image(logo, width="stretch")
     except FileNotFoundError:
         pass
     
@@ -42,7 +42,7 @@ with col_hero_text:
     st.title("Technical Architecture")
     st.markdown(
         """
-        <div style="font-size: 1.1rem; color: #555; margin-bottom: 1rem;">
+        <div style="font-size: 1.1rem; margin-bottom: 1rem;">
         BioZip uses advanced compression, biological encoding schemes, and AI reconstruction 
         to store data efficiently in synthetic DNA. Below is a deep dive into the pipelines.
         </div>

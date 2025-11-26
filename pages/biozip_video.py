@@ -40,7 +40,7 @@ with col_hero_text:
     st.title("Video Pipeline")
     st.markdown(
         """
-        <div style="font-size: 1.1rem; color: #555; margin-bottom: 1rem;">
+        <div style="font-size: 1.1rem; margin-bottom: 1rem;">
         Video is heavy, but DNA is dense. We use <b>Generative Restoration</b> to bridge the gap.
         By compressing video to a tiny grayscale skeleton and using AI to "dream" the colors and details back,
         we make video storage on DNA a reality.
@@ -65,7 +65,7 @@ st.markdown("---")
 with st.sidebar:
     try:
         logo = Image.open("assets/logo.png")
-        st.image(logo, use_container_width=True)
+        st.image(logo, width="stretch")
     except FileNotFoundError:
         pass
     
@@ -104,17 +104,25 @@ segment_seconds = st.sidebar.number_input(
 st.sidebar.markdown("---")
 st.sidebar.markdown("### AI Enhancement (after decoding)")
 
+# Disable heavy AI features in production to prevent deployment issues
+is_production = Config.ENV == "production"
+
 do_colorize = st.sidebar.checkbox(
     "AI colorization",
     value=False,
-    help="Colorize the reconstructed grayscale video using an OpenCV DNN colorizer.",
+    disabled=is_production,
+    help="Colorize the reconstructed grayscale video using an OpenCV DNN colorizer." + (" (Disabled in deployment)" if is_production else ""),
 )
 
 do_upscale = st.sidebar.checkbox(
     "AI upscaling (ESRGAN x4)",
     value=False,
-    help="Upscale the video using ESRGAN. This increases resolution and detail.",
+    disabled=is_production,
+    help="Upscale the video using ESRGAN. This increases resolution and detail." + (" (Disabled in deployment)" if is_production else ""),
 )
+
+if is_production:
+    st.sidebar.caption("⚠️ AI features disabled in cloud demo")
 
 target_fps = st.sidebar.number_input(
     "Smoothed output FPS",
@@ -188,14 +196,16 @@ with col_encode:
                     
                     st.markdown(
                         f"""
-                        <div style="background-color: #e8f4f8; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                            <h4 style="margin:0; color: #0b3d91;">💰 Estimated Cost: {format_cost_estimate(cost_per_nt, total_bases)}</h4>
-                            <div style="font-size: 0.9rem; opacity: 0.8;">@ {cost_per_nt:.2f} €/nt</div>
-                            <hr style="margin: 0.5rem 0;">
-                            <b>Stats:</b><br>
-                            • Total oligos: {stats['total_oligos']}<br>
-                            • Total bases: {stats['total_bases']}<br>
-                            • Avg length: {stats['average_length']:.0f} nt
+                        <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); padding: 1rem; margin-top: 1rem; box-shadow: 4px 4px 0px var(--shadow-color);">
+                            <h4 style="margin:0; color: var(--text-color);">💰 Estimated Cost: {format_cost_estimate(cost_per_nt, total_bases)}</h4>
+                            <div style="font-size: 0.9rem; opacity: 0.8; color: var(--text-color);">@ {cost_per_nt:.2f} €/nt</div>
+                            <hr style="margin: 0.5rem 0; border-top: 1px solid var(--border-color);">
+                            <div style="color: var(--text-color);">
+                                <b>Stats:</b><br>
+                                • Total oligos: {stats['total_oligos']}<br>
+                                • Total bases: {stats['total_bases']}<br>
+                                • Avg length: {stats['average_length']:.0f} nt
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True,

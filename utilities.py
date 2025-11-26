@@ -210,121 +210,182 @@ def check_and_download_models() -> None:
 
 def apply_theme():
     """
-    Apply a high-contrast black & white theme to the Streamlit app.
+    Apply a high-contrast theme (Light or Dark) based on user selection.
     """
-    st.markdown(
+    # Initialize session state for theme if not present
+    if "theme" not in st.session_state:
+        st.session_state.theme = "Dark"
+
+    # Add theme toggle to sidebar
+    with st.sidebar:
+        st.markdown("### Theme Settings")
+        selected_theme = st.radio(
+            "Choose Theme",
+            ["Dark", "Light"],
+            index=0 if st.session_state.theme == "Dark" else 1,
+            key="theme_selector"
+        )
+        
+        # Update session state if changed
+        if selected_theme != st.session_state.theme:
+            st.session_state.theme = selected_theme
+            st.rerun()
+
+    # Define CSS variables based on theme
+    if st.session_state.theme == "Dark":
+        css_vars = """
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-color: #ffffff;
+            --secondary-bg: #000000;
+            --border-color: #ffffff;
+            --button-bg: #ffffff;
+            --button-text: #000000;
+            --card-bg: #000000;
+            --sidebar-bg: #000000;
+            --code-bg: #1a1a1a;
+            --shadow-color: #ffffff;
         """
+    else:
+        css_vars = """
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --accent-color: #000000;
+            --secondary-bg: #ffffff;
+            --border-color: #000000;
+            --button-bg: #000000;
+            --button-text: #ffffff;
+            --card-bg: #ffffff;
+            --sidebar-bg: #ffffff;
+            --code-bg: #f0f0f0;
+            --shadow-color: #000000;
+        """
+
+    st.markdown(
+        f"""
         <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;600;700&display=swap" rel="stylesheet">
         <style>
-            /* High Contrast Black & White Theme */
-            :root {
-                --bg-color: #ffffff;
-                --text-color: #000000;
-                --accent-color: #000000;
-                --secondary-bg: #ffffff;
-                --border-color: #000000;
-            }
+            /* High Contrast Theme Variables */
+            :root {{
+                {css_vars}
+            }}
 
             /* Force background and text colors */
-            .stApp {
+            .stApp {{
                 background-color: var(--bg-color);
                 color: var(--text-color);
-            }
+            }}
+            
+            /* Fix white header bar */
+            header[data-testid="stHeader"] {{
+                background-color: var(--bg-color) !important;
+            }}
 
-            html, body, [class*="css"] {
+            html, body, [class*="css"] {{
                 font-family: 'Alexandria', sans-serif !important;
                 color: var(--text-color) !important;
                 background-color: var(--bg-color);
-            }
+            }}
 
             /* Primary CTA button style (all st.button) */
-            div.stButton > button {
-                background-color: #000000 !important;
-                color: #ffffff !important;
-                border: 2px solid #000000 !important;
+            div.stButton > button {{
+                background-color: var(--button-bg) !important;
+                color: var(--button-text) !important;
+                border: 2px solid var(--border-color) !important;
                 border-radius: 0px !important; /* Sharp edges for high contrast feel */
                 font-weight: 700 !important;
                 text-transform: uppercase;
                 padding: 0.75rem 2rem;
                 font-size: 1.1rem;
                 transition: all 0.2s ease;
-                box-shadow: 4px 4px 0px #00000033 !important;
-            }
+                box-shadow: 4px 4px 0px var(--shadow-color) !important;
+            }}
 
-            div.stButton > button:hover {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-                border: 2px solid #000000 !important;
+            div.stButton > button:hover {{
+                background-color: var(--bg-color) !important;
+                color: var(--text-color) !important;
+                border: 2px solid var(--border-color) !important;
                 transform: translate(-2px, -2px);
-                box-shadow: 6px 6px 0px #000000 !important;
-            }
+                box-shadow: 6px 6px 0px var(--border-color) !important;
+            }}
 
             /* Headings */
-            h1, h2, h3, h4, h5, h6 {
-                color: #000000 !important;
+            h1, h2, h3, h4, h5, h6 {{
+                color: var(--text-color) !important;
                 font-weight: 800 !important;
                 text-transform: uppercase;
                 letter-spacing: 1px;
-            }
+            }}
 
             /* Cards (feature-card, pipeline-card, tech-card) */
-            .feature-card, .pipeline-card, .tech-card {
-                background-color: #ffffff !important;
-                border: 3px solid #000000 !important;
+            .feature-card, .pipeline-card, .tech-card {{
+                background-color: var(--card-bg) !important;
+                border: 3px solid var(--border-color) !important;
                 border-radius: 0px !important;
-                color: #000000 !important;
-                box-shadow: 8px 8px 0px #000000 !important; /* Hard shadow */
+                color: var(--text-color) !important;
+                box-shadow: 8px 8px 0px var(--shadow-color) !important; /* Hard shadow */
                 padding: 2rem;
                 margin-bottom: 1rem;
-            }
+            }}
             
             /* Remove specific tech-card border-left if it conflicts */
-            .tech-card {
-                border-left: 3px solid #000000 !important;
-            }
+            .tech-card {{
+                border-left: 3px solid var(--border-color) !important;
+            }}
 
             /* Inputs */
-            .stTextInput > div > div > input, .stTextArea > div > div > textarea, .stNumberInput > div > div > input {
-                background-color: #ffffff !important;
-                color: #000000 !important;
-                border: 2px solid #000000 !important;
+            .stTextInput > div > div > input, .stTextArea > div > div > textarea, .stNumberInput > div > div > input {{
+                background-color: var(--bg-color) !important;
+                color: var(--text-color) !important;
+                border: 2px solid var(--border-color) !important;
                 border-radius: 0px !important;
-            }
+                caret-color: var(--text-color);
+            }}
             
             /* Sidebar */
-            [data-testid="stSidebar"] {
-                background-color: #ffffff !important;
-                border-right: 3px solid #000000 !important;
-            }
+            [data-testid="stSidebar"] {{
+                background-color: var(--sidebar-bg) !important;
+                border-right: 3px solid var(--border-color) !important;
+            }}
             
+            /* Force all text in sidebar to be correct color */
+            [data-testid="stSidebar"] * {{
+                color: var(--text-color) !important;
+            }}
+
             /* Info/Success/Error boxes */
-            .stAlert {
-                background-color: #ffffff !important;
-                border: 2px solid #000000 !important;
-                color: #000000 !important;
+            .stAlert {{
+                background-color: var(--bg-color) !important;
+                border: 2px solid var(--border-color) !important;
+                color: var(--text-color) !important;
                 border-radius: 0px !important;
-                box-shadow: 4px 4px 0px #000000 !important;
-            }
+                box-shadow: 4px 4px 0px var(--shadow-color) !important;
+            }}
             
             /* Links */
-            a {
-                color: #000000 !important;
+            a {{
+                color: var(--text-color) !important;
                 text-decoration: underline !important;
                 font-weight: bold;
-            }
+            }}
             
             /* Dividers */
-            hr {
-                border-top: 2px solid #000000 !important;
-            }
+            hr {{
+                border-top: 2px solid var(--border-color) !important;
+            }}
             
             /* Code blocks */
-            code {
-                color: #000000 !important;
-                background-color: #f0f0f0 !important;
-                border: 1px solid #000000 !important;
+            code {{
+                color: var(--text-color) !important;
+                background-color: var(--code-bg) !important;
+                border: 1px solid var(--border-color) !important;
                 font-weight: bold !important;
-            }
+            }}
+            
+            /* Radio buttons in sidebar */
+            .stRadio > label {{
+                color: var(--text-color) !important;
+            }}
         </style>
         """,
         unsafe_allow_html=True,
