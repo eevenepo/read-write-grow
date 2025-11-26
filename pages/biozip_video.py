@@ -13,6 +13,7 @@ from utilities import (
     get_dna_statistics,
     format_cost_estimate,
     validate_dna_sequence,
+    apply_theme,
 )
 
 # ---------------------- LOGGING ----------------------
@@ -27,43 +28,7 @@ st.set_page_config(
 )
 
 # ---------------------- GLOBAL STYLES ----------------------
-st.markdown("""
-    <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <style>
-        html, body, [class*="css"] {
-            font-family: 'Alexandria', sans-serif !important;
-        }
-
-        /* Primary CTA button style (all st.button) */
-        div.stButton > button {
-            background: #0b3d91;
-            color: #ffffff;
-            padding: 0.75rem 2rem;
-            border-radius: 12px;
-            border: none;
-            font-weight: 600;
-            font-size: 1.1rem;
-            cursor: pointer;
-            width: 100%;
-            transition: all 0.3s ease;
-        }
-
-        div.stButton > button:hover {
-            background: #1053c4;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(11, 61, 145, 0.2);
-        }
-
-        h1 {
-            color: #0b3d91;
-            font-weight: 700;
-        }
-        
-        h3 {
-            color: #2c3e50;
-        }
-    </style>
-""", unsafe_allow_html=True)
+apply_theme()
 
 # ---------------------- HEADER ----------------------
 if st.button("← Back to overview"):

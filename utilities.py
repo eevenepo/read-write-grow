@@ -9,6 +9,7 @@ import tempfile
 import shutil
 import requests
 import os
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
@@ -205,3 +206,126 @@ def check_and_download_models() -> None:
                 if model_path.exists():
                     model_path.unlink()
                 raise e
+
+
+def apply_theme():
+    """
+    Apply a high-contrast black & white theme to the Streamlit app.
+    """
+    st.markdown(
+        """
+        <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;600;700&display=swap" rel="stylesheet">
+        <style>
+            /* High Contrast Black & White Theme */
+            :root {
+                --bg-color: #ffffff;
+                --text-color: #000000;
+                --accent-color: #000000;
+                --secondary-bg: #ffffff;
+                --border-color: #000000;
+            }
+
+            /* Force background and text colors */
+            .stApp {
+                background-color: var(--bg-color);
+                color: var(--text-color);
+            }
+
+            html, body, [class*="css"] {
+                font-family: 'Alexandria', sans-serif !important;
+                color: var(--text-color) !important;
+                background-color: var(--bg-color);
+            }
+
+            /* Primary CTA button style (all st.button) */
+            div.stButton > button {
+                background-color: #000000 !important;
+                color: #ffffff !important;
+                border: 2px solid #000000 !important;
+                border-radius: 0px !important; /* Sharp edges for high contrast feel */
+                font-weight: 700 !important;
+                text-transform: uppercase;
+                padding: 0.75rem 2rem;
+                font-size: 1.1rem;
+                transition: all 0.2s ease;
+                box-shadow: 4px 4px 0px #00000033 !important;
+            }
+
+            div.stButton > button:hover {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                border: 2px solid #000000 !important;
+                transform: translate(-2px, -2px);
+                box-shadow: 6px 6px 0px #000000 !important;
+            }
+
+            /* Headings */
+            h1, h2, h3, h4, h5, h6 {
+                color: #000000 !important;
+                font-weight: 800 !important;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            /* Cards (feature-card, pipeline-card, tech-card) */
+            .feature-card, .pipeline-card, .tech-card {
+                background-color: #ffffff !important;
+                border: 3px solid #000000 !important;
+                border-radius: 0px !important;
+                color: #000000 !important;
+                box-shadow: 8px 8px 0px #000000 !important; /* Hard shadow */
+                padding: 2rem;
+                margin-bottom: 1rem;
+            }
+            
+            /* Remove specific tech-card border-left if it conflicts */
+            .tech-card {
+                border-left: 3px solid #000000 !important;
+            }
+
+            /* Inputs */
+            .stTextInput > div > div > input, .stTextArea > div > div > textarea, .stNumberInput > div > div > input {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                border: 2px solid #000000 !important;
+                border-radius: 0px !important;
+            }
+            
+            /* Sidebar */
+            [data-testid="stSidebar"] {
+                background-color: #ffffff !important;
+                border-right: 3px solid #000000 !important;
+            }
+            
+            /* Info/Success/Error boxes */
+            .stAlert {
+                background-color: #ffffff !important;
+                border: 2px solid #000000 !important;
+                color: #000000 !important;
+                border-radius: 0px !important;
+                box-shadow: 4px 4px 0px #000000 !important;
+            }
+            
+            /* Links */
+            a {
+                color: #000000 !important;
+                text-decoration: underline !important;
+                font-weight: bold;
+            }
+            
+            /* Dividers */
+            hr {
+                border-top: 2px solid #000000 !important;
+            }
+            
+            /* Code blocks */
+            code {
+                color: #000000 !important;
+                background-color: #f0f0f0 !important;
+                border: 1px solid #000000 !important;
+                font-weight: bold !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )

@@ -1,5 +1,7 @@
 numpy<2
 cython
+requests
+protobuf
 spacy==3.7.4
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
 sentence-transformers
@@ -14,18 +16,11 @@ opencv-python-headless
 torch
 torchvision
 torchaudio
-basicsr
-realesrgan
 # Streamlit & Data
 pandas
 altair
 watchdog
 pillow
-# Basicsr dependencies (explicit to avoid issues)
 scikit-image
-lmdb
 pyyaml
-tb-nightly
-future
-addict
-yapf
+tensorboard
