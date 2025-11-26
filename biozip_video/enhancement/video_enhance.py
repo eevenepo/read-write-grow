@@ -162,15 +162,16 @@ class ESRGANUpscaler:
         global ESRGAN_AVAILABLE, ESRGAN_IMPORT_ERROR
 
         try:
-            from realesrgan import RealESRGANer
-            from basicsr.archs.rrdbnet_arch import RRDBNet
+            # Use local RRDBNet implementation to avoid basicsr dependency
+            from biozip_video.rrdbnet_arch import RRDBNet
             import torch
+            from torch.nn import functional as F
         except Exception as e:
             ESRGAN_AVAILABLE = False
             ESRGAN_IMPORT_ERROR = e
-            logger.exception("Real-ESRGAN imports failed")
+            logger.exception("PyTorch imports failed")
             raise RuntimeError(
-                "Real-ESRGAN is not available. Check log."
+                "PyTorch is not available. Check log."
             ) from e
 
         # Force CPU if CUDA not available
@@ -183,23 +184,22 @@ class ESRGANUpscaler:
             raise FileNotFoundError(f"ESRGAN model file not found: {model_path}")
 
         # standard RealESRGAN_x4plus architecture
-        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-
+        self.model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32)
+        
         try:
-            self.er = RealESRGANer(
-                scale=4,
-                model_path=str(model_path),
-                model=model,
-                tile=400,      # Tiling helps reduce memory usage and sometimes artifacts
-                tile_pad=10,
-                pre_pad=0,
-                half=(device == "cuda"), # Use FP16 only on CUDA
-                device=device,
-            )
+            loadnet = torch.load(str(model_path), map_location=torch.device(device))
+            if 'params_ema' in loadnet:
+                keyname = 'params_ema'
+            else:
+                keyname = 'params'
+            self.model.load_state_dict(loadnet[keyname], strict=True)
+            self.model.eval()
+            self.model = self.model.to(device)
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize ESRGAN: {e}") from e
+            raise RuntimeError(f"Failed to load ESRGAN weights: {e}") from e
 
         self.device = device
+        self.torch = torch
         ESRGAN_AVAILABLE = True
         logger.info(f"Loaded ESRGAN model from {model_path} on device={device}")
 
@@ -208,9 +208,21 @@ class ESRGANUpscaler:
         Upscale 4x and apply sharpening to reduce 'plastic' look.
         """
         # 1. AI Upscale
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        out_rgb, _ = self.er.enhance(frame_rgb, outscale=4)
-        out_bgr = cv2.cvtColor(out_rgb, cv2.COLOR_RGB2BGR)
+        # Pre-process: BGR -> RGB, 0-255 -> 0-1, HWC -> CHW
+        img = frame_bgr.astype(np.float32) / 255.
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = self.torch.from_numpy(np.transpose(img, (2, 0, 1))).float()
+        img = img.unsqueeze(0).to(self.device)
+
+        # Inference
+        with self.torch.no_grad():
+            output = self.model(img)
+
+        # Post-process: CHW -> HWC, 0-1 -> 0-255, RGB -> BGR
+        output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+        output = np.transpose(output, (1, 2, 0))
+        output = (output * 255.0).round().astype(np.uint8)
+        out_bgr = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
 
         # 2. Post-Process: Unsharp Mask (Sharpening)
         # The AI tends to over-smooth low-res video. We add clarity back.
