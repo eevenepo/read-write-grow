@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 import tempfile
 import shutil
+import requests
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -164,3 +166,42 @@ def log_decoding_stats(
         f"recovered_tokens={recovered_tokens}/{total_tokens} "
         f"({recovery_ratio:.1f}%)"
     )
+
+
+def download_file_from_url(url: str, dest_path: Path) -> None:
+    """
+    Download a file from a URL to a destination path.
+    """
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+    with open(dest_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+
+def check_and_download_models() -> None:
+    """
+    Check if required model files exist, and download them if missing.
+    """
+    models_dir = Path("models")
+    models_dir.mkdir(exist_ok=True)
+
+    models = {
+        "RealESRGAN_x4plus.pth": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+        "colorization_release_v2.caffemodel": "https://www.dropbox.com/s/dx0qvhhp5hbcx7z/colorization_release_v2.caffemodel?dl=1"
+    }
+
+    for model_name, url in models.items():
+        model_path = models_dir / model_name
+        if not model_path.exists():
+            logger.info(f"Downloading {model_name}...")
+            print(f"Downloading {model_name}...") # Print to stdout for Streamlit logs
+            try:
+                download_file_from_url(url, model_path)
+                logger.info(f"Successfully downloaded {model_name}")
+            except Exception as e:
+                logger.error(f"Failed to download {model_name}: {e}")
+                # Remove partial file if download failed
+                if model_path.exists():
+                    model_path.unlink()
+                raise e

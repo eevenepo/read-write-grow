@@ -1,6 +1,14 @@
 """BioZip: DNA-based data storage application landing page."""
 import streamlit as st
 from PIL import Image
+from utilities import check_and_download_models
+
+# Check and download models on startup
+with st.spinner("Checking and downloading required AI models... (This may take a minute on first run)"):
+    try:
+        check_and_download_models()
+    except Exception as e:
+        st.error(f"Failed to download models: {e}")
 
 st.set_page_config(
     page_title="BioZip",
