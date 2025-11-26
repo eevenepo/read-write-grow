@@ -183,7 +183,15 @@ def download_file_from_url(url: str, dest_path: Path) -> None:
 def check_and_download_models() -> None:
     """
     Check if required model files exist, and download them if missing.
+    Only downloads in development environment to prevent deployment timeouts.
     """
+    # Import Config here to avoid circular imports
+    from config import Config
+
+    if Config.ENV != "development":
+        logger.info("Skipping model download in non-development environment.")
+        return
+
     models_dir = Path("models")
     models_dir.mkdir(exist_ok=True)
 
