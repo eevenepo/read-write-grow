@@ -2,6 +2,95 @@ import numpy as np
 import spacy
 from sentence_transformers import SentenceTransformer
 from typing import List, Tuple, Dict, Any, Set
+import unicodedata
+import re
+
+
+def sanitize_text_to_ascii(text: str) -> str:
+    """
+    Sanitize text by replacing common non-ASCII characters with ASCII equivalents.
+    This handles smart quotes, em-dashes, and other typographic characters that
+    word processors and websites commonly insert.
+    
+    Args:
+        text: Input text that may contain non-ASCII characters
+    
+    Returns:
+        Text with non-ASCII characters replaced by ASCII equivalents
+    """
+    # Common replacements for smart quotes and typographic characters
+    replacements = {
+        # Smart quotes (curly quotes)
+        '\u2018': "'",   # Left single quote '
+        '\u2019': "'",   # Right single quote ' (also used as apostrophe)
+        '\u201A': "'",   # Single low quote ‚
+        '\u201B': "'",   # Single high-reversed quote ‛
+        '\u201C': '"',   # Left double quote "
+        '\u201D': '"',   # Right double quote "
+        '\u201E': '"',   # Double low quote „
+        '\u201F': '"',   # Double high-reversed quote ‟
+        '\u2032': "'",   # Prime ′
+        '\u2033': '"',   # Double prime ″
+        '\u00AB': '"',   # Left guillemet «
+        '\u00BB': '"',   # Right guillemet »
+        '\u2039': "'",   # Single left guillemet ‹
+        '\u203A': "'",   # Single right guillemet ›
+        
+        # Dashes and hyphens
+        '\u2013': '-',   # En dash –
+        '\u2014': '-',   # Em dash —
+        '\u2015': '-',   # Horizontal bar ―
+        '\u2212': '-',   # Minus sign −
+        
+        # Spaces
+        '\u00A0': ' ',   # Non-breaking space
+        '\u2002': ' ',   # En space
+        '\u2003': ' ',   # Em space
+        '\u2009': ' ',   # Thin space
+        '\u200A': ' ',   # Hair space
+        '\u200B': '',    # Zero-width space (remove)
+        '\u202F': ' ',   # Narrow no-break space
+        '\u205F': ' ',   # Medium mathematical space
+        '\u3000': ' ',   # Ideographic space
+        
+        # Other common characters
+        '\u2026': '...',  # Ellipsis …
+        '\u00B7': '.',    # Middle dot ·
+        '\u2022': '*',    # Bullet •
+        '\u00B0': ' degrees',  # Degree symbol °
+        '\u00D7': 'x',    # Multiplication sign ×
+        '\u00F7': '/',    # Division sign ÷
+        '\u00AE': '(R)',  # Registered trademark ®
+        '\u2122': '(TM)', # Trademark ™
+        '\u00A9': '(C)',  # Copyright ©
+        '\u00BC': '1/4',  # Fraction ¼
+        '\u00BD': '1/2',  # Fraction ½
+        '\u00BE': '3/4',  # Fraction ¾
+    }
+    
+    # Apply replacements
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    
+    # Normalize unicode (e.g., é -> e with combining accent, then remove accents)
+    # NFD decomposes characters, then we filter out combining marks
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(char for char in text if unicodedata.category(char) != 'Mn')
+    
+    # Replace any remaining non-ASCII with closest ASCII or remove
+    cleaned = []
+    for char in text:
+        if ord(char) < 128:
+            cleaned.append(char)
+        else:
+            # Try to find ASCII equivalent, otherwise skip
+            ascii_char = unicodedata.normalize('NFKD', char).encode('ascii', 'ignore').decode('ascii')
+            if ascii_char:
+                cleaned.append(ascii_char)
+            # else: skip the character
+    
+    return ''.join(cleaned)
+
 
 class InputEncoder:
     """
@@ -68,6 +157,9 @@ class InputEncoder:
             List of sentences, where each sentence is a list of
             (token_text, start_idx, end_idx) tuples
         """
+        # Sanitize text to handle smart quotes and other non-ASCII characters
+        text = sanitize_text_to_ascii(text)
+        
         doc = self.nlp(text)
 
         sentences: List[List[Tuple[str, int, int]]] = []
@@ -275,6 +367,9 @@ class InputEncoder:
         High-level helper:
         Given raw text, compute important tokens and return a gap-encoded semantic skeleton.
         """
+        # Sanitize text first to handle smart quotes and non-ASCII characters
+        text = sanitize_text_to_ascii(text)
+        
         print(f"Encoding text to GAP semantic skeleton (masking_ratio={masking_ratio})")
 
         # 1) Tokenize
@@ -491,6 +586,9 @@ class InputEncoder:
         Returns:
             Dictionary with gap_skeleton and metadata
         """
+        # Sanitize text first to handle smart quotes and non-ASCII characters
+        text = sanitize_text_to_ascii(text)
+        
         # Step 1: Tokenize
         sentences = self.tokenize_text(text)
         
