@@ -78,10 +78,16 @@ with st.sidebar:
     st.markdown("---")
 
 st.sidebar.header("Settings")
-st.sidebar.info(
-    f"**Environment**: {Config.ENV.value}\n\n"
-    "All processing is done in-memory. No files are stored locally."
-)
+if Config.IS_STREAMLIT_CLOUD:
+    st.sidebar.info(
+        "**Running on**: Streamlit Cloud\n\n"
+        "AI enhancement features are disabled. Run locally for full capabilities."
+    )
+else:
+    st.sidebar.info(
+        "**Running on**: Local\n\n"
+        "All features available including AI enhancement."
+    )
 
 huffman_path = Config.HUFFMAN_DICT_PATH
 
@@ -104,25 +110,25 @@ segment_seconds = st.sidebar.number_input(
 st.sidebar.markdown("---")
 st.sidebar.markdown("### AI Enhancement (after decoding)")
 
-# Disable heavy AI features in production to prevent deployment issues
-is_production = Config.ENV == "production"
+# Disable heavy AI features on Streamlit Cloud (models too large, no GPU)
+is_cloud = Config.IS_STREAMLIT_CLOUD
 
 do_colorize = st.sidebar.checkbox(
     "AI colorization",
     value=False,
-    disabled=is_production,
-    help="Colorize the reconstructed grayscale video using an OpenCV DNN colorizer." + (" (Disabled in deployment)" if is_production else ""),
+    disabled=is_cloud,
+    help="Colorize the reconstructed grayscale video using an OpenCV DNN colorizer." + (" (Disabled on Streamlit Cloud)" if is_cloud else ""),
 )
 
 do_upscale = st.sidebar.checkbox(
     "AI upscaling (ESRGAN x4)",
     value=False,
-    disabled=is_production,
-    help="Upscale the video using ESRGAN. This increases resolution and detail." + (" (Disabled in deployment)" if is_production else ""),
+    disabled=is_cloud,
+    help="Upscale the video using ESRGAN. This increases resolution and detail." + (" (Disabled on Streamlit Cloud)" if is_cloud else ""),
 )
 
-if is_production:
-    st.sidebar.caption("⚠️ AI features disabled in cloud demo")
+if is_cloud:
+    st.sidebar.caption("⚠️ AI enhancement disabled on Streamlit Cloud. Run locally for full features.")
 
 target_fps = st.sidebar.number_input(
     "Smoothed output FPS",

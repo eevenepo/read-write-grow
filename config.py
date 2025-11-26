@@ -20,11 +20,22 @@ class CloudProvider(str, Enum):
     GCS = "gcs"
 
 
+def is_running_on_streamlit_cloud() -> bool:
+    """Detect if running on Streamlit Cloud."""
+    # Streamlit Cloud sets specific environment variables
+    return (
+        os.getenv("STREAMLIT_SHARING_MODE") is not None
+        or os.getenv("STREAMLIT_SERVER_HEADLESS") == "true"
+        or os.path.exists("/mount/src")  # Streamlit Cloud mounts repo here
+    )
+
+
 class Config:
     """Central configuration management."""
 
-    # Environment
-    ENV = Environment(os.getenv("ENV", "development"))
+    # Environment - auto-detect Streamlit Cloud
+    IS_STREAMLIT_CLOUD = is_running_on_streamlit_cloud()
+    ENV = Environment.PRODUCTION if IS_STREAMLIT_CLOUD else Environment(os.getenv("ENV", "development"))
 
     # API Keys
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
