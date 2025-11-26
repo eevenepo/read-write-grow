@@ -8,7 +8,19 @@ from biozip_text.output_pipeline import decode_oligo_pool_to_skeleton
 from oligos.oligos import fragment_master_dna
 from biozip_text.text_reconstruction import reconstruct_text_with_gemini
 from config import Config
-from utilities import get_dna_statistics, format_cost_estimate, log_encoding_stats, apply_theme
+from utilities import (
+    get_dna_statistics,
+    format_cost_estimate,
+    log_encoding_stats,
+    apply_theme,
+    validate_text_input,
+    validate_dna_file,
+    calculate_compression_metrics,
+    display_metrics_card,
+    save_encoding_result,
+    get_encoding_result,
+    display_error_with_help,
+)
 
 # ---------------------- LOGGING ----------------------
 logging.basicConfig(level=Config.LOG_LEVEL)
@@ -97,10 +109,18 @@ with st.sidebar:
     st.markdown("---")
 
 st.sidebar.header("Settings")
-st.sidebar.info(
-    f"**Environment**: {Config.ENV.value}\n\n"
-    f"**Gemini Model**: {Config.GEMINI_MODEL}"
-)
+if Config.IS_STREAMLIT_CLOUD:
+    st.sidebar.info(
+        "**Running on**: Streamlit Cloud\n\n"
+        f"**Gemini Model**: {Config.GEMINI_MODEL}\n\n"
+        "Full text pipeline available."
+    )
+else:
+    st.sidebar.info(
+        "**Running on**: Local\n\n"
+        f"**Gemini Model**: {Config.GEMINI_MODEL}\n\n"
+        "All features available."
+    )
 
 huffman_path = Config.HUFFMAN_DICT_PATH
 
@@ -129,76 +149,99 @@ with col_encode:
     )
 
     if st.button("🧬 Encode to DNA"):
+        # Validate input
+        is_valid, error_msg = validate_text_input(input_text, Config.MAX_TEXT_SIZE_CHARS)
+        
         if not huffman_path.exists():
-            st.error("Huffman dictionary not found.")
-        elif not input_text.strip():
-            st.error("Text cannot be empty.")
-        elif len(input_text) > Config.MAX_TEXT_SIZE_CHARS:
-            st.error(
-                f"Text too large. Maximum {Config.MAX_TEXT_SIZE_CHARS} characters."
-            )
+            st.error("Huffman dictionary not found. Please check your installation.")
+        elif not is_valid:
+            st.error(error_msg)
         else:
-            with st.spinner("Encoding text into DNA and fragmenting into oligos..."):
-                try:
-                    enc_result = encode_text_to_dna(
-                        text=input_text,
-                        masking_ratio=masking_ratio,
-                        huffman_dict_path=huffman_path,
-                    )
+            progress_bar = st.progress(0, text="Starting encoding...")
+            
+            try:
+                progress_bar.progress(10, text="Analyzing text semantics...")
+                
+                enc_result = encode_text_to_dna(
+                    text=input_text,
+                    masking_ratio=masking_ratio,
+                    huffman_dict_path=huffman_path,
+                )
+                
+                progress_bar.progress(50, text="Fragmenting into DNA oligos...")
 
-                    dict_frags = fragment_master_dna(enc_result["dna_dict_master"], file_id=0)
-                    rel_frags = fragment_master_dna(enc_result["dna_rel_master"], file_id=1)
-                    all_frags = dict_frags + rel_frags
+                dict_frags = fragment_master_dna(enc_result["dna_dict_master"], file_id=0)
+                rel_frags = fragment_master_dna(enc_result["dna_rel_master"], file_id=1)
+                all_frags = dict_frags + rel_frags
 
-                    file_text = "\n".join(f["sequence"] for f in all_frags)
-                    bytes_data = file_text.encode("ascii")
-                    total_bases = sum(len(f["payload"]) for f in all_frags)
+                file_text = "\n".join(f["sequence"] for f in all_frags)
+                bytes_data = file_text.encode("ascii")
+                total_bases = sum(len(f["payload"]) for f in all_frags)
 
-                    # Log statistics
-                    metadata = enc_result["metadata"]
-                    log_encoding_stats(
-                        total_tokens=metadata["num_tokens"],
-                        important_tokens=metadata["num_important_tokens"],
-                        masking_ratio=masking_ratio,
-                        dna_length=len(file_text),
-                        num_oligos=len(all_frags),
-                    )
+                progress_bar.progress(90, text="Finalizing...")
 
-                except Exception as e:
-                    logger.error(f"Encoding error: {e}")
-                    st.error(f"Encoding error: {e}")
-                else:
-                    st.success(
-                        f"Generated {len(all_frags)} oligos "
-                        f"(dict: {len(dict_frags)}, rel: {len(rel_frags)})."
-                    )
+                # Log statistics
+                metadata = enc_result["metadata"]
+                log_encoding_stats(
+                    total_tokens=metadata["num_tokens"],
+                    important_tokens=metadata["num_important_tokens"],
+                    masking_ratio=masking_ratio,
+                    dna_length=len(file_text),
+                    num_oligos=len(all_frags),
+                )
+                
+                # Save result to session state for later retrieval
+                save_encoding_result("text_encoding", {
+                    "bytes_data": bytes_data,
+                    "stats": get_dna_statistics([f["sequence"] for f in all_frags]),
+                    "total_bases": total_bases,
+                    "metadata": metadata,
+                })
+                
+                progress_bar.progress(100, text="Complete!")
 
-                    stats = get_dna_statistics([f["sequence"] for f in all_frags])
-                    
-                    cost = Config.DEFAULT_COST_PER_NT * total_bases
-                    st.markdown(
-                        f"""
-                        <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); padding: 1rem; margin-top: 1rem; box-shadow: 4px 4px 0px var(--shadow-color);">
-                            <h4 style="margin:0; color: var(--text-color);">💰 Estimated Cost: {format_cost_estimate(Config.DEFAULT_COST_PER_NT, total_bases)}</h4>
-                            <div style="font-size: 0.9rem; opacity: 0.8; color: var(--text-color);">@ {Config.DEFAULT_COST_PER_NT} €/nt</div>
-                            <hr style="margin: 0.5rem 0; border-top: 1px solid var(--border-color);">
-                            <div style="color: var(--text-color);">
-                                <b>Stats:</b><br>
-                                • Total oligos: {stats['total_oligos']}<br>
-                                • Total bases: {stats['total_bases']}<br>
-                                • Avg length: {stats['average_length']:.0f} nt
-                            </div>
+            except Exception as e:
+                logger.error(f"Encoding error: {e}")
+                display_error_with_help(e, "Encoding failed")
+            else:
+                st.success(
+                    f"✅ Generated {len(all_frags)} oligos "
+                    f"(dict: {len(dict_frags)}, rel: {len(rel_frags)})."
+                )
+
+                stats = get_dna_statistics([f["sequence"] for f in all_frags])
+                
+                # Calculate and display compression metrics
+                metrics = calculate_compression_metrics(
+                    original_size=len(input_text),
+                    compressed_size=metadata["num_important_tokens"],
+                    dna_bases=total_bases,
+                )
+                display_metrics_card(metrics, "Semantic Compression Results")
+                
+                st.markdown(
+                    f"""
+                    <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); padding: 1rem; margin-top: 1rem; box-shadow: 4px 4px 0px var(--shadow-color);">
+                        <h4 style="margin:0; color: var(--text-color);">💰 Estimated Cost: {format_cost_estimate(Config.DEFAULT_COST_PER_NT, total_bases)}</h4>
+                        <div style="font-size: 0.9rem; opacity: 0.8; color: var(--text-color);">@ {Config.DEFAULT_COST_PER_NT} €/nt</div>
+                        <hr style="margin: 0.5rem 0; border-top: 1px solid var(--border-color);">
+                        <div style="color: var(--text-color);">
+                            <b>DNA Stats:</b><br>
+                            • Total oligos: {stats['total_oligos']:,}<br>
+                            • Total bases: {stats['total_bases']:,}<br>
+                            • Avg length: {stats['average_length']:.0f} nt
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                    st.download_button(
-                        "⬇️ Download DNA File",
-                        data=bytes_data,
-                        file_name="dna_oligos.txt",
-                        mime="text/plain",
-                    )
+                st.download_button(
+                    "⬇️ Download DNA File",
+                    data=bytes_data,
+                    file_name="dna_oligos.txt",
+                    mime="text/plain",
+                )
 
 # --- RIGHT COLUMN: DECODE ---
 with col_decode:
@@ -214,41 +257,73 @@ with col_decode:
 
     if st.button("✨ Decode & Reconstruct"):
         huffman_path = Path(Config.HUFFMAN_DICT_PATH)
+        
+        # Validate inputs
         if not huffman_path.exists():
-            st.error("Huffman dictionary not found.")
-        elif uploaded_file is None:
-            st.error("Upload a DNA file first.")
+            st.error("Huffman dictionary not found. Please check your installation.")
         else:
-            try:
-                raw = uploaded_file.read().decode("ascii", errors="ignore")
-                lines = [ln.strip() for ln in raw.splitlines()]
-                pool = [ln for ln in lines if ln and not ln.startswith(">")]
-
-                if not pool:
-                    st.error("No valid sequences found.")
-                    st.stop()
-
-                with st.spinner("Decoding oligos → semantic structure..."):
+            # Use the new validation helper
+            is_valid, warning_or_error, pool = validate_dna_file(uploaded_file)
+            
+            if not is_valid:
+                st.error(warning_or_error)
+            else:
+                if warning_or_error:  # There's a warning about skipped sequences
+                    st.warning(warning_or_error)
+                
+                progress_bar = st.progress(0, text="Starting decoding...")
+                
+                try:
+                    progress_bar.progress(20, text=f"Processing {len(pool)} oligos...")
+                    
                     skeleton = decode_oligo_pool_to_skeleton(
                         pool,
                         huffman_dict_path=huffman_path,
                     )
+                    
+                    progress_bar.progress(50, text="Connecting to Gemini AI...")
 
-                api_key = get_gemini_api_key()
+                    api_key = get_gemini_api_key()
 
-                with st.spinner("Reconstructing readable text..."):
+                    progress_bar.progress(60, text="Reconstructing text with AI...")
+                    
                     text = reconstruct_text_with_gemini(
                         skeleton,
                         api_key=api_key,
                         model_name=model_name,
                     )
+                    
+                    progress_bar.progress(100, text="Complete!")
 
-                st.success("Decoding complete.")
-                st.text_area("Reconstructed text", value=text, height=300)
+                    st.success("✅ Decoding complete!")
+                    
+                    # Show skeleton stats
+                    st.markdown(
+                        f"""
+                        <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); 
+                                    padding: 1rem; margin: 1rem 0; box-shadow: 4px 4px 0px var(--shadow-color);">
+                            <b>📊 Decoding Stats:</b><br>
+                            • Oligos processed: {len(pool):,}<br>
+                            • Tokens recovered: {skeleton.get('num_important_tokens', 'N/A')}<br>
+                            • Total token positions: {skeleton.get('total_tokens', 'N/A')}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    
+                    st.text_area("Reconstructed text", value=text, height=300)
+                    
+                    # Offer download of reconstructed text
+                    st.download_button(
+                        "⬇️ Download Reconstructed Text",
+                        data=text.encode("utf-8"),
+                        file_name="reconstructed_text.txt",
+                        mime="text/plain",
+                    )
 
-            except Exception as e:
-                logger.error(f"Decoding error: {e}")
-                st.error(f"Decoding error: {e}")
+                except Exception as e:
+                    logger.error(f"Decoding error: {e}")
+                    display_error_with_help(e, "Decoding failed")
 
 st.markdown("---")
 st.caption("📧 support@biozip.com · © 2025 BioZip")

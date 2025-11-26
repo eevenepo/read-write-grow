@@ -14,6 +14,11 @@ from utilities import (
     format_cost_estimate,
     validate_dna_sequence,
     apply_theme,
+    validate_video_file,
+    validate_dna_file,
+    display_error_with_help,
+    format_file_size,
+    save_encoding_result,
 )
 
 # ---------------------- LOGGING ----------------------
@@ -165,68 +170,88 @@ with col_encode:
     encode_btn = st.button("🧬 Encode Video")
 
     if encode_btn:
+        # Validate inputs
+        is_valid, error_msg = validate_video_file(uploaded_video, max_size_mb=100)
+        
         if not huffman_path.exists():
-            st.error("Huffman dictionary not found.")
-        elif uploaded_video is None:
-            st.error("Upload a video first.")
+            st.error("Huffman dictionary not found. Please check your installation.")
+        elif not is_valid:
+            st.error(error_msg)
         else:
-            with st.spinner("Preprocessing video and encoding into DNA oligos..."):
-                try:
-                    with InMemoryWorkspace(prefix="biozip_encode_") as work_dir:
-                        enc_result = encode_video_to_oligos(
-                            input_video=uploaded_video,
-                            huffman_dict_path=huffman_path,
-                            file_id=0,
-                            work_dir=str(work_dir),
-                            width=width,
-                            height=height,
-                            crf=crf,
-                            fps=fps,
-                            segment_seconds=segment_seconds,
-                            payload_len=100,
-                            overlap=20,
-                        )
-                except Exception as e:
-                    logger.error(f"Encoding error: {e}")
-                    st.error(f"Encoding error: {e}")
-                else:
+            # Show file info
+            st.caption(f"📁 File: {uploaded_video.name} ({format_file_size(uploaded_video.size)})")
+            
+            progress_bar = st.progress(0, text="Starting video encoding...")
+            
+            try:
+                progress_bar.progress(10, text="Preprocessing video (grayscale, resize, compress)...")
+                
+                with InMemoryWorkspace(prefix="biozip_encode_") as work_dir:
+                    enc_result = encode_video_to_oligos(
+                        input_video=uploaded_video,
+                        huffman_dict_path=huffman_path,
+                        file_id=0,
+                        work_dir=str(work_dir),
+                        width=width,
+                        height=height,
+                        crf=crf,
+                        fps=fps,
+                        segment_seconds=segment_seconds,
+                        payload_len=100,
+                        overlap=20,
+                    )
+                    
+                    progress_bar.progress(80, text="Encoding segments to DNA...")
+                    
                     oligo_sequences = enc_result["oligo_sequences"]
                     
-                    st.success(
-                        f"Generated {len(oligo_sequences)} oligos across "
-                        f"{len(enc_result['segment_paths'])} segments."
-                    )
-
-                    stats = get_dna_statistics(oligo_sequences)
-                    total_bases = stats['total_bases']
-                    
-                    st.markdown(
-                        f"""
-                        <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); padding: 1rem; margin-top: 1rem; box-shadow: 4px 4px 0px var(--shadow-color);">
-                            <h4 style="margin:0; color: var(--text-color);">💰 Estimated Cost: {format_cost_estimate(cost_per_nt, total_bases)}</h4>
-                            <div style="font-size: 0.9rem; opacity: 0.8; color: var(--text-color);">@ {cost_per_nt:.2f} €/nt</div>
-                            <hr style="margin: 0.5rem 0; border-top: 1px solid var(--border-color);">
-                            <div style="color: var(--text-color);">
-                                <b>Stats:</b><br>
-                                • Total oligos: {stats['total_oligos']}<br>
-                                • Total bases: {stats['total_bases']}<br>
-                                • Avg length: {stats['average_length']:.0f} nt
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    # Prepare downloadable oligo file
+                    # Save to session state
                     file_text = "\n".join(oligo_sequences)
                     bytes_data = file_text.encode("ascii")
+                    save_encoding_result("video_encoding", {
+                        "bytes_data": bytes_data,
+                        "oligo_count": len(oligo_sequences),
+                        "segment_count": len(enc_result['segment_paths']),
+                    })
+                    
+                    progress_bar.progress(100, text="Complete!")
+                    
+            except Exception as e:
+                logger.error(f"Encoding error: {e}")
+                display_error_with_help(e, "Video encoding failed")
+            else:
+                st.success(
+                    f"✅ Generated {len(oligo_sequences):,} oligos across "
+                    f"{len(enc_result['segment_paths'])} segments."
+                )
 
-                    st.download_button(
-                        "⬇️ Download DNA File",
-                        data=bytes_data,
-                        file_name="video_dna_oligos.txt",
-                        mime="text/plain",
-                    )
+                stats = get_dna_statistics(oligo_sequences)
+                total_bases = stats['total_bases']
+                
+                st.markdown(
+                    f"""
+                    <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); padding: 1rem; margin-top: 1rem; box-shadow: 4px 4px 0px var(--shadow-color);">
+                        <h4 style="margin:0; color: var(--text-color);">💰 Estimated Cost: {format_cost_estimate(cost_per_nt, total_bases)}</h4>
+                        <div style="font-size: 0.9rem; opacity: 0.8; color: var(--text-color);">@ {cost_per_nt:.2f} €/nt</div>
+                        <hr style="margin: 0.5rem 0; border-top: 1px solid var(--border-color);">
+                        <div style="color: var(--text-color);">
+                            <b>DNA Stats:</b><br>
+                            • Total oligos: {stats['total_oligos']:,}<br>
+                            • Total bases: {stats['total_bases']:,}<br>
+                            • Avg length: {stats['average_length']:.0f} nt<br>
+                            • Segments: {len(enc_result['segment_paths'])}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                st.download_button(
+                    "⬇️ Download DNA File",
+                    data=bytes_data,
+                    file_name="video_dna_oligos.txt",
+                    mime="text/plain",
+                )
 
 # --- RIGHT COLUMN: DECODE ---
 with col_decode:
@@ -250,31 +275,32 @@ with col_decode:
     decode_btn = st.button("✨ Decode & Enhance")
 
     if decode_btn:
+        # Validate inputs
         if not huffman_path.exists():
-            st.error("Huffman dictionary not found.")
-        elif uploaded_dna_file is None:
-            st.error("Upload a DNA oligo file first.")
+            st.error("Huffman dictionary not found. Please check your installation.")
         else:
-            try:
-                raw = uploaded_dna_file.read().decode("ascii", errors="ignore")
-                lines = [ln.strip() for ln in raw.splitlines()]
-                pool = [ln for ln in lines if ln and not ln.startswith(">")]
-
-                # Validate sequences
-                valid_pool = [s for s in pool if validate_dna_sequence(s)]
-                invalid_count = len(pool) - len(valid_pool)
-
-                if not valid_pool:
-                    st.error("No valid DNA sequences found. Check file format.")
-                    st.stop()
-
-                if invalid_count > 0:
-                    st.warning(f"Ignored {invalid_count} invalid lines.")
-
-                pool = valid_pool
-
-                with st.spinner("Decoding oligos → segments → base video..."):
-                    video_bytes = None
+            is_valid, warning_or_error, valid_pool = validate_dna_file(uploaded_dna_file)
+            
+            if not is_valid:
+                st.error(warning_or_error)
+            else:
+                if warning_or_error:
+                    st.warning(warning_or_error)
+                
+                # Show what enhancements will be applied
+                enhancements = []
+                if do_colorize:
+                    enhancements.append("🎨 Colorization")
+                if do_upscale:
+                    enhancements.append("🔍 ESRGAN Upscaling")
+                enhancements.append("✨ Temporal Smoothing")
+                
+                st.caption(f"**Enhancements:** {' → '.join(enhancements)}")
+                
+                progress_bar = st.progress(0, text="Starting video decoding...")
+                
+                try:
+                    progress_bar.progress(10, text=f"Processing {len(valid_pool):,} oligos...")
                     
                     # Locate ESRGAN model if needed
                     models_dir = Path("models")
@@ -286,54 +312,68 @@ with col_decode:
                             esrgan_model_path = str(p)
                             break
 
+                    progress_bar.progress(20, text="Decoding DNA to video segments...")
+                    
                     with InMemoryWorkspace(prefix="biozip_decode_") as work_dir:
                         base_out_path = work_dir / out_video_name
 
+                        progress_bar.progress(40, text="Reconstructing video...")
+                        
                         # Pass all parameters to the updated pipeline
                         decode_result = decode_oligo_pool_to_video(
-                            oligo_seqs=pool,
+                            oligo_seqs=valid_pool,
                             huffman_dict_path=huffman_path,
                             out_video_path=str(base_out_path),
                             payload_len=100,
                             overlap=20,
-                            width=width,    # <--- PASSED FROM SIDEBAR
-                            height=height,  # <--- PASSED FROM SIDEBAR
-                            fps=fps,        # <--- PASSED FROM SIDEBAR
+                            width=width,
+                            height=height,
+                            fps=fps,
                             do_colorize=do_colorize,
                             do_upscale=do_upscale,
                             target_fps=int(target_fps) if target_fps else None,
                             color_model_dir=str(models_dir),
                             esrgan_model_path=esrgan_model_path
                         )
+                        
+                        progress_bar.progress(90, text="Finalizing video...")
 
                         final_path = Path(decode_result["out_video_path"])
 
                         # Read final bytes
-                        try:
-                            with open(final_path, "rb") as f:
-                                video_bytes = f.read()
-                        except Exception as e:
-                            st.error(f"Failed to read output video: {e}")
+                        with open(final_path, "rb") as f:
+                            video_bytes = f.read()
+                    
+                    progress_bar.progress(100, text="Complete!")
 
-                if video_bytes is None:
-                    st.stop()
+                except Exception as e:
+                    logger.error(f"Decoding error: {e}")
+                    display_error_with_help(e, "Video decoding failed")
+                else:
+                    st.success("✅ Reconstruction complete!")
+                    
+                    # Show result stats
+                    st.markdown(
+                        f"""
+                        <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); 
+                                    padding: 1rem; margin: 1rem 0; box-shadow: 4px 4px 0px var(--shadow-color);">
+                            <b>📊 Reconstruction Stats:</b><br>
+                            • Oligos processed: {len(valid_pool):,}<br>
+                            • Output size: {format_file_size(len(video_bytes))}<br>
+                            • Colorized: {'Yes' if decode_result.get('colorized') else 'No'}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                st.success("Reconstruction complete!")
+                    st.download_button(
+                        "⬇️ Download Video",
+                        data=video_bytes,
+                        file_name=final_path.name,
+                        mime="video/mp4",
+                    )
 
-                st.download_button(
-                    "⬇️ Download Video",
-                    data=video_bytes,
-                    file_name=final_path.name,
-                    mime="video/mp4",
-                )
-
-                try:
-                    st.video(video_bytes)
-                except Exception:
-                    st.info("Preview unavailable, please download.")
-
-            except Exception as e:
-                logger.error(f"Decoding error: {e}")
-                st.error(f"Decoding error: {e}")
-
-
+                    try:
+                        st.video(video_bytes)
+                    except Exception:
+                        st.info("Preview unavailable, please download.")

@@ -398,3 +398,294 @@ def apply_theme():
         """,
         unsafe_allow_html=True,
     )
+
+
+# ---------------------- INPUT VALIDATION ----------------------
+
+def validate_text_input(text: str, max_chars: int = 10000) -> Tuple[bool, str]:
+    """
+    Validate text input for encoding.
+    
+    Args:
+        text: Input text to validate
+        max_chars: Maximum allowed characters
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not text or not text.strip():
+        return False, "Text cannot be empty. Please enter some text to encode."
+    
+    if len(text) > max_chars:
+        return False, f"Text too long ({len(text):,} chars). Maximum allowed: {max_chars:,} characters."
+    
+    # Check for minimum meaningful content
+    words = text.split()
+    if len(words) < 3:
+        return False, "Text too short. Please enter at least a few words for meaningful compression."
+    
+    return True, ""
+
+
+def validate_video_file(file, max_size_mb: int = 50) -> Tuple[bool, str]:
+    """
+    Validate uploaded video file.
+    
+    Args:
+        file: Streamlit uploaded file object
+        max_size_mb: Maximum file size in MB
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if file is None:
+        return False, "No video file uploaded. Please select a video file."
+    
+    # Check file size
+    file_size_mb = file.size / (1024 * 1024)
+    if file_size_mb > max_size_mb:
+        return False, f"Video file too large ({file_size_mb:.1f} MB). Maximum allowed: {max_size_mb} MB for demo."
+    
+    # Check extension
+    valid_extensions = [".mp4", ".mov", ".mkv", ".avi", ".webm"]
+    file_ext = Path(file.name).suffix.lower()
+    if file_ext not in valid_extensions:
+        return False, f"Unsupported video format '{file_ext}'. Supported: {', '.join(valid_extensions)}"
+    
+    return True, ""
+
+
+def validate_dna_file(file) -> Tuple[bool, str, List[str]]:
+    """
+    Validate and parse uploaded DNA oligo file.
+    
+    Args:
+        file: Streamlit uploaded file object
+    
+    Returns:
+        Tuple of (is_valid, error_message, oligo_sequences)
+    """
+    if file is None:
+        return False, "No DNA file uploaded. Please select a file.", []
+    
+    try:
+        raw = file.read().decode("ascii", errors="ignore")
+        file.seek(0)  # Reset file pointer
+    except Exception as e:
+        return False, f"Could not read file: {e}", []
+    
+    if not raw.strip():
+        return False, "File is empty. Please upload a valid DNA oligo file.", []
+    
+    lines = [ln.strip() for ln in raw.splitlines()]
+    # Filter out FASTA headers and empty lines
+    oligos = [ln for ln in lines if ln and not ln.startswith(">")]
+    
+    if not oligos:
+        return False, "No valid DNA sequences found. Check that the file contains oligo sequences.", []
+    
+    # Validate sequences contain only valid bases
+    valid_bases = set("ACGT")
+    invalid_count = 0
+    valid_oligos = []
+    
+    for seq in oligos:
+        if all(base in valid_bases for base in seq):
+            valid_oligos.append(seq)
+        else:
+            invalid_count += 1
+    
+    if not valid_oligos:
+        return False, "No valid DNA sequences found. Sequences must contain only A, C, G, T.", []
+    
+    warning = ""
+    if invalid_count > 0:
+        warning = f" (Note: {invalid_count} invalid sequences were skipped)"
+    
+    return True, warning, valid_oligos
+
+
+# ---------------------- METRICS & ANALYTICS ----------------------
+
+def calculate_compression_metrics(
+    original_size: int,
+    compressed_size: int,
+    dna_bases: int,
+) -> Dict[str, Any]:
+    """
+    Calculate comprehensive compression metrics.
+    
+    Args:
+        original_size: Original data size in bytes/chars
+        compressed_size: Compressed size (e.g., important tokens)
+        dna_bases: Total DNA bases used
+    
+    Returns:
+        Dictionary with various metrics
+    """
+    compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
+    bits_per_base = (compressed_size * 8) / dna_bases if dna_bases > 0 else 0
+    
+    # DNA storage density (theoretical)
+    # 1 nucleotide = 2 bits of information
+    theoretical_bits = dna_bases * 2
+    efficiency = (compressed_size * 8) / theoretical_bits * 100 if theoretical_bits > 0 else 0
+    
+    return {
+        "original_size": original_size,
+        "compressed_size": compressed_size,
+        "compression_ratio_percent": round(compression_ratio, 1),
+        "dna_bases": dna_bases,
+        "bits_per_base": round(bits_per_base, 2),
+        "storage_efficiency_percent": round(efficiency, 1),
+        "space_saved_percent": round(compression_ratio, 1),
+    }
+
+
+def format_file_size(size_bytes: int) -> str:
+    """
+    Format file size in human-readable format.
+    
+    Args:
+        size_bytes: Size in bytes
+    
+    Returns:
+        Formatted string (e.g., "1.5 MB")
+    """
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} TB"
+
+
+def display_metrics_card(metrics: Dict[str, Any], title: str = "Compression Metrics") -> None:
+    """
+    Display a styled metrics card in Streamlit.
+    
+    Args:
+        metrics: Dictionary of metrics to display
+        title: Card title
+    """
+    st.markdown(
+        f"""
+        <div style="background-color: var(--card-bg); border: 2px solid var(--border-color); 
+                    padding: 1.5rem; margin: 1rem 0; box-shadow: 4px 4px 0px var(--shadow-color);">
+            <h4 style="margin: 0 0 1rem 0; color: var(--text-color);">📊 {title}</h4>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
+                <div style="color: var(--text-color);">
+                    <b>Compression:</b> {metrics.get('compression_ratio_percent', 0)}%
+                </div>
+                <div style="color: var(--text-color);">
+                    <b>DNA Bases:</b> {metrics.get('dna_bases', 0):,}
+                </div>
+                <div style="color: var(--text-color);">
+                    <b>Storage Efficiency:</b> {metrics.get('storage_efficiency_percent', 0)}%
+                </div>
+                <div style="color: var(--text-color);">
+                    <b>Bits/Base:</b> {metrics.get('bits_per_base', 0)}
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------------- SESSION STATE HELPERS ----------------------
+
+def save_encoding_result(key: str, data: Dict[str, Any]) -> None:
+    """
+    Save encoding result to session state for later retrieval.
+    
+    Args:
+        key: Unique key for this encoding result
+        data: Data to save
+    """
+    if "encoding_results" not in st.session_state:
+        st.session_state.encoding_results = {}
+    st.session_state.encoding_results[key] = data
+
+
+def get_encoding_result(key: str) -> Dict[str, Any] | None:
+    """
+    Retrieve encoding result from session state.
+    
+    Args:
+        key: Key for the encoding result
+    
+    Returns:
+        Saved data or None if not found
+    """
+    if "encoding_results" not in st.session_state:
+        return None
+    return st.session_state.encoding_results.get(key)
+
+
+def clear_encoding_results() -> None:
+    """
+    Clear all saved encoding results from session state.
+    """
+    if "encoding_results" in st.session_state:
+        st.session_state.encoding_results = {}
+
+
+# ---------------------- ERROR HANDLING HELPERS ----------------------
+
+class BioZipError(Exception):
+    """Base exception for BioZip errors."""
+    
+    def __init__(self, message: str, suggestion: str = ""):
+        self.message = message
+        self.suggestion = suggestion
+        super().__init__(self.message)
+
+
+class EncodingError(BioZipError):
+    """Error during encoding process."""
+    pass
+
+
+class DecodingError(BioZipError):
+    """Error during decoding process."""
+    pass
+
+
+class ModelNotFoundError(BioZipError):
+    """Error when required model files are missing."""
+    pass
+
+
+def display_error_with_help(error: Exception, context: str = "") -> None:
+    """
+    Display an error message with helpful suggestions.
+    
+    Args:
+        error: The exception that occurred
+        context: Additional context about what was being attempted
+    """
+    error_msg = str(error)
+    
+    # Common error patterns and suggestions
+    suggestions = {
+        "ffmpeg": "FFmpeg is not installed. Install it with `brew install ffmpeg` (macOS) or `apt install ffmpeg` (Linux).",
+        "GEMINI_API_KEY": "Gemini API key not configured. Set it in environment variables or Streamlit secrets.",
+        "huffman": "Huffman dictionary file not found. Ensure the `oligos/` directory contains the required files.",
+        "model": "Required model file not found. Run locally to auto-download, or manually place models in the `models/` directory.",
+        "memory": "Out of memory. Try with a smaller file or reduce resolution settings.",
+        "timeout": "Operation timed out. Try with a smaller file.",
+    }
+    
+    suggestion = ""
+    for key, sugg in suggestions.items():
+        if key.lower() in error_msg.lower():
+            suggestion = sugg
+            break
+    
+    if isinstance(error, BioZipError) and error.suggestion:
+        suggestion = error.suggestion
+    
+    st.error(f"❌ **{context}**: {error_msg}" if context else f"❌ {error_msg}")
+    
+    if suggestion:
+        st.info(f"💡 **Suggestion:** {suggestion}")

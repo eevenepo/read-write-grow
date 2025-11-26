@@ -31,10 +31,18 @@ with st.sidebar:
     st.page_link("pages/technical_details.py", label="Architecture", icon="⚙️")
     st.markdown("---")
 
-st.sidebar.info(
-    f"**Environment**: {Config.ENV.value}\n\n"
-    f"**Gemini Model**: {Config.GEMINI_MODEL}"
-)
+if Config.IS_STREAMLIT_CLOUD:
+    st.sidebar.info(
+        "**Running on**: Streamlit Cloud\n\n"
+        f"**Gemini Model**: {Config.GEMINI_MODEL}\n\n"
+        "AI enhancement features disabled."
+    )
+else:
+    st.sidebar.info(
+        "**Running on**: Local\n\n"
+        f"**Gemini Model**: {Config.GEMINI_MODEL}\n\n"
+        "All features available."
+    )
 
 # Hero Section
 col_hero_text, col_hero_img = st.columns([2, 1])
@@ -44,7 +52,8 @@ with col_hero_text:
         """
         <div style="font-size: 1.1rem; margin-bottom: 1rem;">
         BioZip uses advanced compression, biological encoding schemes, and AI reconstruction 
-        to store data efficiently in synthetic DNA. Below is a deep dive into the pipelines.
+        to store data efficiently in synthetic DNA. Below is a deep dive into both pipelines,
+        including details on how features adapt between local and cloud deployment.
         </div>
         """, 
         unsafe_allow_html=True
@@ -59,6 +68,12 @@ with col_hero_img:
         """, 
         unsafe_allow_html=True
     )
+
+# Deployment mode indicator
+if Config.IS_STREAMLIT_CLOUD:
+    st.warning("☁️ **Cloud Mode**: You're viewing the Streamlit Cloud version. AI enhancement features (colorization, upscaling) are disabled. Run locally for full capabilities.")
+else:
+    st.success("💻 **Local Mode**: All features are available including AI colorization and ESRGAN upscaling.")
 
 st.markdown("---")
 
@@ -174,18 +189,19 @@ with col4:
         <div class="tech-card">
         <b>1. Reconstruction</b><br>
         DNA is decoded back into binary video segments, which are concatenated into a low-res, 
-        grayscale video file.
+        grayscale video file. This step works identically on both local and cloud deployments.
         <br><br>
-        <b>2. AI Colorization</b><br>
+        <b>2. AI Colorization</b> <span style="color: #ff6b6b;">🖥️ Local Only</span><br>
         A CNN (<b>Zhang et al.</b>) analyzes the Luma (L) channel and predicts the missing Chroma (ab) channels. 
         It "hallucinates" plausible colors (e.g., sky is blue, grass is green) based on the semantic content 
-        of the grayscale frames.
+        of the grayscale frames. <i>Requires ~100MB colorization model.</i>
         <br><br>
-        <b>3. Super-Resolution</b><br>
+        <b>3. Super-Resolution</b> <span style="color: #ff6b6b;">🖥️ Local Only</span><br>
         <b>Real-ESRGAN</b> (x4) upscales the video (e.g., 160p → 640p). It uses a GAN trained on real-world 
         images to invent realistic high-frequency textures and sharpen edges that were lost during compression.
+        <i>Requires ~64MB ESRGAN model + significant compute.</i>
         <br><br>
-        <b>4. Temporal Smoothing</b><br>
+        <b>4. Temporal Smoothing</b> <span style="color: #4ecdc4;">✓ Always Available</span><br>
         AI models process each frame in isolation, often causing jittery colors or flickering. 
         We apply a <b>stabilization filter</b> that blends the current frame with its neighbors to smooth out this noise. 
         To prevent "ghosting" (double-exposure effects) when the camera cuts to a new scene, our algorithm detects 
@@ -196,6 +212,73 @@ with col4:
     )
 
 st.markdown("---")
+
+# ---------------------- DEPLOYMENT MODES ----------------------
+st.header("3. Deployment Modes")
+st.markdown(
+    """
+    BioZip automatically detects its runtime environment and adjusts available features accordingly.
+    This ensures the app runs smoothly on resource-constrained cloud platforms while providing
+    full capabilities for local development.
+    """
+)
+
+col5, col6 = st.columns(2)
+
+with col5:
+    st.markdown("### ☁️ Streamlit Cloud")
+    st.markdown(
+        """
+        <div class="tech-card">
+        <b>Detection Method</b><br>
+        The app detects cloud deployment by checking:
+        <ul>
+            <li><code>STREAMLIT_SHARING_MODE</code> environment variable</li>
+            <li><code>STREAMLIT_SERVER_HEADLESS</code> = "true"</li>
+            <li>Existence of <code>/mount/src</code> directory</li>
+        </ul>
+        <br>
+        <b>Available Features</b><br>
+        ✅ Text encoding & decoding (full Gemini integration)<br>
+        ✅ Video encoding (FFmpeg preprocessing)<br>
+        ✅ Video decoding (grayscale output)<br>
+        ✅ Temporal smoothing<br>
+        ❌ AI Colorization (model too large)<br>
+        ❌ ESRGAN Upscaling (requires GPU/heavy compute)<br>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with col6:
+    st.markdown("### 💻 Local Development")
+    st.markdown(
+        """
+        <div class="tech-card">
+        <b>Detection Method</b><br>
+        If none of the cloud indicators are present, the app runs in local/development mode.
+        You can also force this with <code>ENV=development</code>.
+        <br><br>
+        <b>Available Features</b><br>
+        ✅ Text encoding & decoding (full Gemini integration)<br>
+        ✅ Video encoding (FFmpeg preprocessing)<br>
+        ✅ Video decoding (grayscale output)<br>
+        ✅ Temporal smoothing<br>
+        ✅ AI Colorization (Zhang et al. CNN)<br>
+        ✅ ESRGAN Upscaling (4x resolution boost)<br>
+        <br>
+        <b>Requirements for AI Enhancement</b><br>
+        Place models in <code>models/</code> directory:
+        <ul>
+            <li><code>RealESRGAN_x4plus.pth</code></li>
+            <li><code>colorization_release_v2.caffemodel</code></li>
+            <li><code>colorization_deploy_v2.prototxt</code></li>
+            <li><code>pts_in_hull.npy</code></li>
+        </ul>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 st.markdown(
     """
