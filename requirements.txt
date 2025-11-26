@@ -1,5 +1,6 @@
 numpy<2
 spacy==3.7.4
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
 sentence-transformers
 streamlit>=1.26
 google-generativeai
@@ -8,7 +9,7 @@ bitstring
 python-dotenv
 tqdm
 pydantic>=2.0
-opencv-python
+opencv-python-headless
 torch
 torchvision
 torchaudio
@@ -27,7 +28,3 @@ tb-nightly
 future
 addict
 yapf
-
-# spaCy English model:
-# This line allows pip to install the model directly
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
