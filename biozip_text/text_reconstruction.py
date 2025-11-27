@@ -68,6 +68,7 @@ The original text was compressed by removing common words (articles, preposition
 5. **SENTENCE STRUCTURE**: Large gaps between positions often indicate sentence boundaries. Respect these natural breaks.
 6. **NO INVENTION**: Do not add new concepts, facts, or ideas not implied by the tokens. Only add grammatical glue words.
 7. **TONE PRESERVATION**: If tokens suggest a specific tone (e.g., "good, bad, ugly" suggests a balanced discussion), preserve that tone.
+8. **NO FORMATTING**: Do not use bold (**text**) or italics (*text*) in the output. Output plain text only.
 
 ## EXAMPLE
 If tokens are: "Technology", "critical", "world", "today", "communication", "healthcare"
